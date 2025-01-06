@@ -1,0 +1,323 @@
+---
+title: "Full Pipeline"
+format: html
+editor: visual
+---
+
+# Load Packages
+
+```{r}
+set.seed(99)
+library(dplyr)
+library(ggplot2)
+library(DESeq2)
+library(ggpubr)
+library(Seurat)
+library(RColorBrewer)
+library(ggrepel)
+library(harmony)
+library(gridExtra)
+library(rstudioapi)
+library(patchwork)
+library(S4Vectors)
+library(tidyverse)
+library(sctransform)
+library(decontX)
+library(glmGamPoi)
+library(EnhancedVolcano)
+```
+
+Set working directory and read in Seurat objects(.rds).
+
+```{r}
+pnt <- "C006"
+wkdir <- getwd()
+rds <- readRDS( paste0(wkdir,'/Projects/C6-exact-cutadapt-noIntron_Seurat.rds'))
+
+# Run after previously clustered
+#rds <- readRDS(paste0(savePath, cart, ".RDS"))
+```
+
+Separate WTA from AbSeq (depreciated)
+
+Create assay for each and delete original RNA assay\
+Abseq data is isolated by grepping rows that end with "pAbO".
+
+adt \<- rds\@assays$RNA$counts\[grep("pAbO", rownames(rds)),\] #print(head(abseq)) rna \<- rds\@assays$RNA$counts\[-(grep("pAbO", rownames(rds))),\] rds\[\["ADT"\]\] \<- CreateAssayObject(adt) \## Warning: Feature names cannot have '\_', replacing with '-' DefaultAssay(rds) = "RNA" rm(adt) rm(rna) gc()
+
+[Abseq panel](https://docs.google.com/spreadsheets/d/1ZKzQnN4Y-RBqatd2ftfxB4pQZeHfals3cGp6iybdvqk/edit#gid=427554242)
+
+### Save Feature Names
+
+Closer look at newly created assays. Store Abseq names and WTA genes for later feature call\
+BD Rhapsody Enhanced Cell Capture Beads have
+
+```{r}
+# for C29 should be 31 Abseq markers
+abseq <- rownames(rds[["ADT"]])
+all.genes <- rownames(rds[["RNA"]])
+
+#rownames(obj[["RNA"]])
+#colnames(obj[["RNA"]])
+dim(rds[["RNA"]])
+```
+
+## Quality Check
+
+Threshold for low reads and high mitochondrial read content (dead cells)
+
+EoE_Hal original dimensions: col = 38659 row = 140856
+
+TODO: add a lower bound for nfeat/ncount
+
+```{r}
+# add useful metadata to the Seurat object 
+# in this case the percent of mitochondrial reads 
+# looks for genes with the mitochondrial tag, always possible to miss some 
+rds[["percent.mt"]] <- PercentageFeatureSet(rds, pattern = "^MT-") 
+features = c("nFeature_RNA", "nCount_RNA", "percent.mt") 
+dim(rds) 
+VlnPlot(rds, features = features, pt.size = 0.01, ncol = 3) & labs(x="")
+```
+
+Select QC thresholds
+
+```{r}
+rds <- subset(rds, subset = nFeature_RNA > 300 & nFeature_RNA < 4000 & nCount_RNA > 150 & nCount_RNA < 30000 & percent.mt < 30)
+dim(rds)
+VlnPlot(rds, features = features, pt.size = 0.01, ncol = 3) & labs(x="")+ ggtitle(ptn)
+```
+
+## Normalize WTA & Abseq \> PCA
+
+Seurat 5 default norm: SC transform
+
+```{r}
+# Normalize across cells for WTA
+# TODO updated transform
+DefaultAssay(rds) <- 'RNA'
+rds <- NormalizeData(rds) %>% FindVariableFeatures() %>% ScaleData() %>% RunPCA()
+
+DefaultAssay(rds) <- 'ADT'
+# we will use all ADT features for dimensional reduction
+# we set a dimensional reduction name to avoid overwriting the 
+VariableFeatures(rds) <- rownames(rds[["ADT"]])
+rds <- NormalizeData(rds, normalization.method = 'CLR', margin = 2) %>% 
+  ScaleData() %>% RunPCA(reduction.name = 'apca')
+DefaultAssay(rds) <- 'RNA'
+
+#rds <- SCTransform(rds, verbose = FALSE) %>% RunPCA()
+rds <- FindMultiModalNeighbors(
+  rds, reduction.list = list("pca", "apca"), 
+  dims.list = list(1:30, 1:18), modality.weight.name = "RNA.weight"
+) 
+```
+
+### Variable Genes
+
+```{r}
+# Identify the 10 most highly variable genes
+feat <- 50
+top <- head(VariableFeatures(rds), feat)
+bot <- tail(VariableFeatures(rds), feat)
+
+rds <- FindVariableFeatures(rds, selection.method = "vst", nfeatures = 2000)
+
+# plot variable features with and without labels
+varPlot <- VariableFeaturePlot(rds)
+
+varPlot <- LabelPoints(varPlot, points = c(top), repel = TRUE) + 
+ggtitle(paste("Overall Variable Features:"))
+
+# Write most variable genes to table if you want
+write.csv(top, paste0(savePath, paste0(cart,"_top_all_expression.csv")))
+write.csv(bot,paste0(savePath, paste0(cart,"bot_all_expression.csv")))
+
+varPlot
+```
+
+## Clustering
+
+#### UMAP
+
+We use first 10-20ish PCs to cluster, wherever elbow plot drops off\
+Try to capture as much variance as possible\
+Umap Louvain algorithm: higher res = higher \# of clusters
+
+#### WNN
+
+```{r}
+# WNN CLUSTERING
+DefaultAssay(rds) <- "RNA"
+dim <- 16
+rds <- FindMultiModalNeighbors(
+  rds, reduction.list = list("pca", "apca"), 
+  dims.list = list(1:30, 1:18), modality.weight.name = "RNA.weight"
+)
+rds <- RunUMAP(rds, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+rds <- FindClusters(rds, graph.name = "wsnn", algorithm = 3, resolution = 0.8, verbose = FALSE)
+
+```
+
+FindCluster algorithms:
+
+1 - Louvain algorithm
+
+2 - Louvain w/ multilevel refinement
+
+3 - SLM alg
+
+4 - Leiden alg (requires the leidenalg python)
+
+```{r}
+res <- 0.8
+rds <- RunUMAP(rds, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+rds <- FindClusters(rds, graph.name = "wsnn", algorithm = 3, resolution = 0.8, verbose = FALSE)
+
+rdsClust <- FindClusters(rds, graph.name = "wsnn", algorithm = 1, resolution = res, verbose = FALSE)
+
+DimPlot(rds, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 2.5) + NoLegend() + plot_annotation(title = paste("WNN UMAP res: Louvian:", res, ":", cart))
+gc()
+```
+
+```{r}
+rdsClust <- FindClusters(rds, graph.name = "wsnn", algorithm = 2, resolution = res, verbose = FALSE)
+
+DimPlot(rdsClust, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 2.5) + NoLegend() + plot_annotation(title = paste("WNN UMAP res: Louvian w/multilevel refinement:", res, ":", cart))
+gc()
+```
+
+```{r}
+rdsClust <- FindClusters(rds, graph.name = "wsnn", algorithm = 3, resolution = res, verbose = FALSE)
+
+DimPlot(rdsClust, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 2.5) + NoLegend() + plot_annotation(title = paste("WNN UMAP res: SLM alg", res, ":", cart))
+gc()
+```
+
+```{r}
+rdsClust <- FindClusters(rds, graph.name = "wsnn", algorithm = 4, resolution = res, verbose = FALSE)
+
+DimPlot(rdsClust, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 2.5) + NoLegend() + plot_annotation(title = paste("WNN UMAP res: Leiden alg", res, ":", cart))
+gc()
+```
+
+###### WNN Dotplot
+
+```{r}
+cart<-'C006'
+DefaultAssay(rds) <- "ADT"
+DotPlot(rds, features = rownames(GetAssayData(rds, assay = 'ADT', slot = "counts")), cols = "RdBu", col.min = -1, dot.scale = 8, cluster.idents = TRUE) + 
+  coord_flip() + labs(title = paste("AbSeq Dotplot:", cart))
+# reset the default assay back to RNA!!
+DefaultAssay(rds) <- "RNA"
+```
+
+Feature plots
+
+WTA umap data -\> overlay Abseq expression data
+
+```{r}
+#abseq = rownames(rds@assays$ABSEQ)
+DefaultAssay(rds) <- "ADT"
+# for each of the 31 abseq markers, make a feature plot
+FeaturePlot(rds, features = abseq[0:5], ncol = 5)
+FeaturePlot(rds, features = abseq[6:10], ncol = 5)
+FeaturePlot(rds, features = abseq[11:15], ncol = 5)
+FeaturePlot(rds, features = abseq[16:20], ncol = 5)
+FeaturePlot(rds, features = abseq[21:25], ncol = 5)
+FeaturePlot(rds, features = abseq[26:30], ncol = 5)
+FeaturePlot(rds, features = abseq[31])
+DefaultAssay(rds) <- "RNA"
+```
+
+Ridge Plots
+
+```{r}
+RidgePlot(rds, assay = "ADT", features = abseq[0:8], ncol = 8)
+RidgePlot(rds, assay = "ABSEQ", features = abseq[9:16], ncol = 8)
+RidgePlot(rds, assay = "ABSEQ", features = abseq[17:24], ncol = 8)
+RidgePlot(rds, assay = "ABSEQ", features = abseq[25:31], ncol = 8)
+```
+
+Violin plots: Show Abseq expression for each cluster
+
+```{r}
+# chunk "21": violin plots for first 4 Abseq features
+VlnPlot(object = obj,features = abseq[0:4], pt.size = 0, assay = "Abseq", ncol = 2) & theme(plot.title = element_text(size = 10), axis.text.x = element_text(angle = 0, hjust = 0.5), axis.title.x = element_blank())
+```
+
+Pull subset of CD119+ cells
+
+```{r}
+eos <- rds$assay@ABSEQ
+```
+
+## Cluster Annotation
+
+```{r}
+#obj <- RunAzimuth(obj, reference = "pbmcref")
+
+###############  ANNOTATING CLUSTERS ############### 
+annotations <- rbind(c("0", "Neutrophil progenitor"),
+                     c("1", "Noise"),
+                     c("2", "Neutrophil progenitor"),
+                     c("3", "Eosinophil"),
+                     c("4", "T Cell"),
+                     c("5", "Monocyte"),
+                     c("6", "T Cell"),
+                     c("7", "T Cell"),
+                     c("8", "Noise"),
+                     c("9", "Neutrophil"),
+                     c("10", "Neutrophil"),
+                     c("11", "T Cell"),
+                     c("12", "Natural Killer"),
+                     c("13", "Platelet"),
+                     c("14", "B cell"),
+                     c("15", "Monocyte"),
+                     c("16", "Activated B cell"),
+                     c("17", "Basophil"),
+                     c("18", "HPSC"))
+colnames(annotations) <- c("Cluster", "CellType")
+annotations <- data.frame(annotations)
+
+# prepare the annotation information
+annotations <- setNames(annotations$CellType, annotations$Cluster)
+
+# relabel the Seurat clusters
+# Idents(obj) <- "seurat_clusters"
+rds <- RenameIdents(rds, annotations)
+
+# alphabetize the cell types
+Idents(rds) <- factor(Idents(object = rds), levels = sort(levels(rds)))
+
+# useful metadata (e.g. if you want to have multiple annotation sets)
+rds[["annotated_clusters"]] <- Idents(object = rds)
+
+# info about the clusters
+obj_annotations %>%
+  group_by(CellType) %>%
+  transmute(Clusters = paste0(Cluster, collapse = ", ")) %>%
+  distinct() %>%
+  arrange(CellType)
+
+
+UMAPPlot(rds, label = T) + plot_annotation(title = paste("Annotated UMAP:", cart)) + theme(legend.position="none")
+## UMAP Cells/cluster
+write.csv(t(table(Idents(rds))), file=paste0(savePath, paste0(cart, "_clusters.csv")))
+
+DotPlot(rds, features = rownames(GetAssayData(object = rds@assays$ADT, slot = "counts")), 
+        cols = "RdBu", col.min = -1, dot.scale = 3, cluster.idents = TRUE) + coord_flip() + RotatedAxis() + plot_annotation(title = paste("AbSeq Dotplot:", cart))
+
+# metadata file for MCIA
+meta <- data.frame("CellType" = Idents(rds))
+```
+
+# SAVE YOUR WORK
+
+```{r}
+setwd("C:/Users/Innoscan/Documents/Innoscan_Rhapsody")# Work PC
+#setwd("~/Research/R/Home Rhapsody")                  # Home PC
+
+saveRDS(rds, file= paste0(savePath, cart, ".RDS"))
+#sessionInfo()
+```

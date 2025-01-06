@@ -1,0 +1,42 @@
+BALF-Pilot -> Seurat list built!
+
+BALF-Pilot -> Seurat list built!
+
+2024-11-21 22:38:57.242191 -> RNA SCTransform and integration done and saved!
+
+2024-11-21 22:58:15.669466 -> ADT & RNA independent normalization done and saved!
+
+2024-11-21 22:58:16.420058 -> ADT normalization and integration done and saved!
+
+2024-11-21 22:59:45.940323 -> RNA & ADT INTEGRATION successful, saved before WNN!
+
+2024-11-21 23:34:55.710048 -> DoubletFinder done and saved!
+
+2024-11-22 00:34:20.820593 -> RNA & ADT multi res clustering done! Ready for preview!
+
+2024-11-22 01:07:19.725078 -> READY FOR ANNOTATION!
+
+2024-11-22 09:27:44.26988 -> READY FOR ANNOTATION!
+
+2024-11-22 11:43:29.784369 -> READY FOR ANNOTATION!
+
+BALF-Pilot -> Seurat list built!
+
+BALF-Pilot -> Seurat list built!
+
+2024-12-13 20:50:52.84113 -> RNA SCTransform and integration done and saved!
+
+2024-12-15 00:02:55.807578 -> ADT & RNA independent normalization done and saved!
+
+2024-12-15 00:02:56.537872 -> ADT normalization and integration done and saved!
+
+2024-12-15 00:04:19.122837 -> RNA & ADT INTEGRATION successful, saved before WNN!
+
+2024-12-16 15:25:46.921008 -> DoubletFinder done and saved!
+
+2024-12-16 15:52:15.530434 -> RNA & ADT multi res clustering done! Ready for preview!
+
+2024-12-16 17:03:17.648501 -> RNA & ADT multi res clustering done! Ready for preview!
+
+2024-12-16 17:57:36.530822 -> READY FOR ANNOTATION!
+

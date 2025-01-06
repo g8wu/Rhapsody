@@ -1,0 +1,58 @@
+---
+title: "AbSeq Analysis"
+output: html_notebook
+---
+
+Load packages
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(Seurat)
+```
+
+Set working directory
+```{r}
+setwd("~/Research/Croker")
+path_data <- file.path("..", "data")
+dir.create(path_data, showWarnings = FALSE)
+
+getwd()
+path_data
+```
+Import dataset
+```{r}
+C1_raw <- read_csv
+#C1_table <- read.table("C7_17K_RSEC_ReadsPerCell.csv", header=FALSE, sep = ',')
+
+
+```
+Create Seurat object with data table
+```{r}
+data <- Seurat::ReadSTARsolo(data.dir = file.path(path_data, "C1_",                                        "filtered_feature_bc_matrix"), strip.suffix = TRUE) # remove the "-1"s from barcodes
+## 10X data contains more than one type and is being returned as a list
+## containing matrices of each type.
+
+# set minimum cells and/or features here if you'd like
+obj <- Seurat::CreateSeuratObject(counts = data$`Gene Expression`,
+                                  project = "pbmc5k_CITEseq")
+obj[["ADT"]] <- Seurat::CreateAssayObject(counts = data$`Antibody Capture`)
+## Warning: Feature names cannot have underscores ('_'), replacing with dashes ('-')
+
+# check the assays
+Seurat::Assays(object = obj)
+## "RNA" "ADT"
+
+# list out the CITE-Seq surface protein markers
+rownames(obj[["ADT"]])
+# list out the RNA gene labels
+#rownames(obj[["RNA"]])
+#length(colnames(obj))
+obj
+
+# add useful metadata to the Seurat object
+# in this case the percent of mitochondrial reads
+obj[["percent.mt"]] <- PercentageFeatureSet(object = obj, pattern = "^MT-")
+VlnPlot(obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
