@@ -1,0 +1,14 @@
+Neutrophil,NK cell,Microglia,Monocyte,Macrophage,Eosinophil,Pyroptotic
+Ly6g,Gzma,Tmem119,Cd14,Cd14,Siglecf,Nlrp3
+Itgam,Gzmb,P2ry12,Fcgr3,Cd68,Adgre1,Pycard
+Mpo,Klrd1,Cd68,Itgam,Itgam,Itga4,Mefv
+Fcgr3,Ncam1,Itgam,Ccr2,Itgax,Il5ra,Gsdmd
+Fcgr1,Ncr1,Ptprc,Csf1r,Marco,Ccr3,Il18bp
+Fcgrt,Nkg7,Cx3cr1,Cx3cr1,Ms4a7,Epx,Il18
+,Xcl1,Adgre1,Fcgr1,Csf1,Raf1,Il1b
+,Klrb1,,Fcgr4,Cd163,Itgam,Nek7
+,Fcgr3,,,Nos1,,
+,Itgam,,,Hhla1,,
+,,,,Fcgr2b,,
+,,,,Fcgr3,,
+,,,,Fcgr4,,

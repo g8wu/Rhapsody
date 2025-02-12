@@ -1,0 +1,310 @@
+---
+title: "Rhapsody Pipeline"
+editor: visual
+date: "Compiled: `r format(Sys.time(), '%d %B %Y')`"
+format: pdf
+---
+
+## CiteSeq
+
+ST 11: 302 EoE post dupi
+
+ST 12: 313 EoE control
+
+7B cell call:
+
+```{r}
+# chunk 1: load libraries
+library(GEOquery)
+library(dplyr)
+library(ggplot2)
+library(DESeq2)
+library(ggpubr)
+library(Seurat)
+
+#library(pheatmap)
+library(RColorBrewer)
+#library(ggdendro)
+#library(edgeR)
+library(ggrepel)
+#library(rgl)
+library(gplots) # heatmap.2
+#library(factoextra)
+#library(dendextend)
+library(plotly)
+```
+
+Maybe limit R virtual memory access? HAVE NOT TRIED RUNNING
+
+```{r}
+#memory.limit(size=2500)
+```
+
+Set working directory and read RDS.
+
+```{r}
+cart <- "C029"
+setwd("C:/Users/Innoscan/Documents/Innoscan_Rhapsody")
+setwd("~/Research/R/Home Rhapsody")
+savePath <- paste0("RDS_files/",cart, "/")
+rds <- readRDS(file = paste0(savePath, "C36-exact_Seurat.rds"))
+
+# Run after previously clustered
+# rds <- readRDS(paste0(savePath, "clustered.RDS"))
+```
+
+TODO Separate by SMK
+
+```{r}
+
+DefaultAssay(rds) <- 'ADT'
+# we will use all ADT features for dimensional reduction
+# we set a dimensional reduction name to avoid overwriting the 
+VariableFeatures(rds) <- rownames(rds[["ADT"]])
+rds <- NormalizeData(rds, normalization.method = 'CLR', margin = 2) %>% 
+  ScaleData() %>% RunPCA(reduction.name = 'apca')
+# Identify multimodal neighbors. These will be stored in the neighbors slot, 
+# and can be accessed using dress[['weighted.nn']]
+# The WNN graph can be accessed at dress[["wknn"]], 
+# and the SNN graph used for clustering at dress[["wsnn"]]
+# Cell-specific modality weights can be accessed at dress$RNA.weight
+rds <- FindMultiModalNeighbors(
+  rds, reduction.list = list("pca", "apca"), 
+  dims.list = list(1:30, 1:18), modality.weight.name = "RNA.weight"
+)
+rds <- RunUMAP(rds, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+rds <- FindClusters(rds, graph.name = "wsnn", algorithm = 3, resolution = 0.6, verbose = FALSE)
+```
+
+Separate WTA from AbSeq data and create assay for each. (RNA = WTA, AbSeq = ADT)
+
+Abseq data is isolated by grepping rows that end with "pAbO".
+
+[C29 Abseq panel](https://docs.google.com/spreadsheets/d/1ZKzQnN4Y-RBqatd2ftfxB4pQZeHfals3cGp6iybdvqk/edit#gid=427554242)
+
+```{r}
+adt <- obj@assays$RNA$counts[grep("pAbO", rownames(obj)),]
+rna <- obj@assays$RNA$counts[-(grep("pAbO", rownames(obj))),]
+obj[["Abseq"]] <- CreateAssayObject(adt)
+## Warning: Feature names cannot have underscores ('_'), replacing with dashes ('-')
+# See assays, set default to WTA
+rds[["WTA"]] <- CreateAssayObject(rna)
+DefaultAssay(rds) = "WTA"
+rds[['RNA']] <- NULL
+Assays(rds)
+```
+
+Closer look at newly created assays
+
+BD Rhapsody Enhanced Cell Capture Beads have
+
+```{r}
+# for C29 should be 31 Abseq markers
+rownames(rds[["ABSEQ"]])
+
+#rownames(obj[["WTA"]])
+#colnames(obj[["WTA"]])
+dim(rds[["WTA"]])
+
+# add useful metadata to the Seurat object
+# in this case the percent of mitochondrial reads
+# looks for genes with the mitochondrial tag, always possible to miss some
+rds[["percent.mt"]] <- PercentageFeatureSet(rds, pattern = "^MT-")
+```
+
+Quality Check: threshold for low reads and high mitochondrial read content (dead cells)
+
+TODO: add a lower bound for nfeat/ncount
+
+```{r}
+# chunk "7": create violin plots for QC
+# try + vs & 
+features = c("nFeature_RNA", "nCount_RNA", "percent.mt")
+VlnPlot(rds, features = features,
+        pt.size = 0.01, ncol = 3) & labs(x="")
+rds <- subset(x = rds, subset = nFeature_RNA > 200 & nFeature_RNA < 6500 & percent.mt < 15)
+
+# Violin plot after QC
+VlnPlot(rds, features) & labs(x="")
+
+# Save WTA genes as variable for later
+genes <- rownames(rds[["WTA"]])
+
+dim(rds)
+```
+
+Normalize WTA and AbSeq separately
+
+Seurat 5 default norm: SC transform
+
+```{r}
+# Normalize across cells for WTA
+# TODO updated transform
+rds <- NormalizeData(rds, normalization.method = "LogNormalize",
+                     scale.factor = 10000, assay = "WTA")
+# log1p(exp(1)-1)
+
+## Normalize across cells for Abseq
+rds <- NormalizeData(rds, normalization.method = "CLR",
+                     margin = 2, assay = "ABSEQ")  
+#margin=1 is features margin=2 is across cells
+
+# highly variable features
+# does it only on the RNA because "Active Assay" is RNA
+rds <- FindVariableFeatures(rds, selection.method = "vst",
+                            nfeatures = 2000)
+rds <- RunPCA(rds)
+
+
+VariableFeatures(rds) <- rownames(rds[["ABSEQ"]])
+rds <- NormalizeData(rds) %>% FindVariableFeatures() %>% ScaleData() %>% RunPCA()
+DefaultAssay(rds) <- 'ABSEQ'
+VariableFeatures(rds) <- rownames(rds[["ADT"]])
+rds <- NormalizeData(rds, normalization.method = 'CLR', margin = 2) %>% 
+  ScaleData() %>% RunPCA(reduction.name = 'apca')
+DefaultAssay(rds) <- 'WTA'
+
+# scaling so the average expression is 0 and the variance is 1
+# only for RNA component 
+rds <- ScaleData(rds, features = rownames(rds))
+DefaultAssay(rds) <- "ABSEQ"
+rds <- ScaleData(rds, features = rownames(rds))
+DefaultAssay(rds) <- "WTA"
+#obj@meta.data
+```
+
+Closer look at variable genes
+
+```{r}
+# Identify the 10 most highly variable genes
+feat <- 50
+top <- head(VariableFeatures(rds), feat)
+bot <- tail(VariableFeatures(rds), feat)
+
+rds <- FindVariableFeatures(rds, selection.method = "vst", nfeatures = 2000)
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(rds)
+plot2 <- LabelPoints(plot = plot1, points = c(top), repel = TRUE) + title(paste(cart, "Overall DEG"))
+
+all.genes.rds <- rownames(rds)
+
+plot2
+```
+
+PCA
+
+Default assay is WTA so PCA is run on just WTA
+
+```{r}
+#dim(obj)
+PCAPlot(rds)
+
+# chunk "11": plot the variance explained by addition of each PCA component 
+# to determine the no of PCs to use for downstream analysis
+ElbowPlot(rds, ndims = 30)
+head(VariableFeatures(rds), 20)
+# these can be plotted if desired
+#LabelPoints(plot = VariableFeaturePlot(object = obj),
+#            points = head(VariableFeatures(object = obj), 20),
+#            repel = TRUE, xnudge = 0, ynudge = 0)
+
+# Heatmap view of desired PCs, here we look at first 5
+DimHeatmap(obj, dims = 1:5,cells = 500, balanced = TRUE)
+
+# see genes for each PC
+VizDimLoadings(obj, dims = 1:2, reduction = 'pca')
+```
+
+Attempting 3D PCA for funsies using plotly
+
+```{r}
+c29PCA <- Embeddings(obj, "pca")
+fig <- plot_ly(c29PCA, x = ~PC1, y = ~PC2, z = ~PC3, color = ~iris$Species, colors = c('#636EFA','#EF553B','#00CC96') )
+```
+
+Clustering for UMAP/tSNE/WNN
+
+We use first 20 PCs to cluster, wherever elbow plot drops off
+
+Umap Louvain algorithm: higher res = higher \# of clusters
+
+```{r}
+# Computing shared nearest neighbor graph
+rds <- FindNeighbors(rds, reduction = "pca", dims = 1:20)
+
+# clustering (adjust dimensions and resolutions as desired)
+# default is Louvain clustering - check how it works
+# https://www.rdocumentation.org/packages/Seurat/versions/1.4.0/topics/FindClusters
+rds <- FindClusters(rds, resolution = 0.5)
+
+rds <- RunUMAP(rds, reduction = "pca", dims = 1:20)
+
+plot_seurat_clusters <- UMAPPlot(rds, label = TRUE, label.size = 5) +
+                          labs(title = paste("Initial UMAP:", cart)) +
+                          theme(plot.title = element_text(hjust = 0.5),
+                                axis.text = element_blank(),
+                                axis.ticks = element_blank()) + 
+                          theme(legend.position="none")
+plot_seurat_clusters
+```
+
+Dotplot using Abseq (skipped WTA Dotplot)
+
+```{r}
+# chunk 18: make a dot plot for clusters using ADT data
+# you have to change the default assay for the dot plot
+DefaultAssay(object = obj) <- "Abseq"
+
+DotPlot(object = obj,
+        features = rownames(GetAssayData(object = obj, assay = "Abseq",
+                                         slot = "counts")),
+        cols = "RdBu", col.min = -1, dot.scale = 3, cluster.idents = TRUE) +
+  RotatedAxis()
+
+# reset the default assay back to RNA!!
+DefaultAssay(object = obj) <- "RNA"
+```
+
+Feature plots:
+
+WTA umap data -\> overlay Abseq expression data
+
+Keep in mind default assay is still WTA
+
+```{r}
+abseq = rownames(obj@assays$Abseq)
+
+# for each of the 31 abseq markers, make a feature plot
+# show first 6 here to save time
+FeaturePlot(obj,features = abseq[0:6], 
+            min.cutoff = 0, label = TRUE, label.size = 3,
+            ncol = 3, raster = FALSE)
+
+```
+
+Violin plots: Show Abseq expression for each cluster
+
+```{r}
+# chunk "21": violin plots for first 4 Abseq features
+VlnPlot(object = obj,
+        features = abseq[0:4],
+        pt.size = 0, assay = "Abseq", ncol = 2) &
+  theme(plot.title = element_text(size = 10),
+        axis.text.x = element_text(angle = 0, hjust = 0.5),
+        axis.title.x = element_blank())
+```
+
+Annotating each cluster
+
+Azimuth test
+
+```{r}
+obj <- RunAzimuth(obj, reference = "pbmcref")
+```
+
+SAVE YOUR WORK
+
+```{r}
+saveRDS(rds, file= saveFileName)
+sessionInfo()
+```
