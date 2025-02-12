@@ -1,42 +1,35 @@
-library(Seurat)
-wkdir <- getwd()
+# # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!##
+# ## SET WORK DIRECTORY TO SPECIFIC PROJECT FOLDER
+# ## !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!##
+#library(Seurat)
 
-pjt <- "cocci-mouseOnly"
-ptn <- "C57.1"
-cart1 <-"C60"
-preST <- "01"
-# cart2 <- "C51"
-# postST <- "09"
+cart1 <-"C67"
+sample <- "C57.6-LUNG-INFECTED"
+preST <- "03_mm"
 
-fileType <- "mouseOnly-exact-poly10-51x71"
+fileType <- "-mouseCocci-exact50k-p10-51x71"
 ##############################
-C1 <-  readRDS(paste0(wkdir, "/", cart1,"-", fileType, "_Seurat.rds"))
+# Read in object
+skibidi <- paste0(getwd())
+C1 <- readRDS(paste0(cart1, fileType, "_Seurat.rds"))
+
+# If no ST, set entire object as patient
 if(preST != "xx"){
-  C1 <- subset(C1, Sample_Tag == paste0("SampleTag", preST,"_hs"))
+  C1 <- subset(C1, Sample_Tag == paste0("SampleTag", preST))
 }
-C1@meta.data$orig.ident <- paste0("remiss", ptn)
-line1 <- paste0(Sys.time(), "\n", cart1, "-", fileType, "-ST", preST, " >> pre", ptn, "\n")
+
+# Assign orig.ident as patient
+C1@meta.data$orig.ident <- sample
+
+# Error log output
+line1 <- paste0(Sys.time(), "\n", cart1, fileType, "-ST", preST, " >> pre", sample, "\n")
+
+# Subset object and save
 tryCatch({
-  saveRDS(C1, file =  paste0(wkdir,  "/", pjt, "/remiss", ptn, "-",fileType, ".rds"))
-  write(line1, file = "sampleSelectLog.txt", append = TRUE)
-  print("remiss done!")
+  saveRDS(C1, file =  paste0(skibidi,  "/", sample, fileType, ".rds"))
+  write(line1, file = "LOG.txt", append = TRUE)
+  print(paste0(sample, fileType, ".rds", " done!"))
 }, error = function(e){
   write(paste0("Error occured: ",line1, e$message))
-  print("Error occured: pre", ptn )
+  print("Error occured: ", sample )
 })
-
-#############
-# C2 <-  readRDS(paste0(wkdir, "/", cart2, "-", fileType, "_Seurat.rds"))
-# if(postST != "xx"){
-#   C2 <- subset(C2, Sample_Tag == paste0("SampleTag", postST,"_hs"))
-# }
-# C2@meta.data$orig.ident <- paste0("post", ptn)
-# line2 <- paste0(Sys.time(), "\n", cart2, "-", fileType, "-ST", postST, " >> post", ptn, "\n")
-# tryCatch({
-#   saveRDS(C2, file =  paste0(wkdir, "/", pjt, "/post", ptn, "-",fileType, ".rds"))
-#   write(line2, file = "sampleSelectLog.txt", append = TRUE)
-#   print("Post done!")
-# }, error = function(e){
-#   write(paste0("Error occured: ", line2, e$message))
-#   print("Error occured: post", ptn )
-# })

@@ -246,7 +246,7 @@ for (res in resRange) {
             labs(title = paste("RNA UMAP Louvian res:", res, ":", project, " ", idents[i])))
   }
   dev.off()
-  write.csv(t(table(Idents(rds))), file=paste(project, fileType, res, "RNAClust.csv", sep = "-"))
+  write.csv(table(Idents(rds)), file=paste(project, fileType, res, "RNAClust.csv", sep = "-"))
 }
 write(paste0(Sys.time(), " -> RNA ONLY multi res clustering done! Ready for preview!\n"), file = "LOG.txt", append = TRUE)
 
@@ -265,6 +265,6 @@ for (res in resRange) {
   print(DimPlot(rds, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 2.5) +
           NoLegend() + labs(title = paste("ADT&RNA WNN UMAP", clusterKey[clusterAlg], res, ":", project)))
   dev.off()
-  write.csv(t(table(Idents(rds))), file=paste(project, fileType, res, "WNNUMAP.csv", sep = "-"))
+  write.csv(table(Idents(rds)), file=paste(project, fileType, res, "WNNUMAP.csv", sep = "-"))
 }
 write(paste0(Sys.time(), " -> RNA & ADT multi res clustering done! Ready for preview!\n"), file = "LOG.txt", append = TRUE)

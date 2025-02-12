@@ -1,40 +1,40 @@
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!##
-# SET WORK DIRECTORY TO SPECIFIC PROJECT FOLDER
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!##
-system("pip install leidenalg")
-install.packages("devtools")
-devtools::install_github("immunogenomics/presto")
+# # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!##
+# ## SET WORK DIRECTORY TO SPECIFIC PROJECT FOLDER
+# ## !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!##
+# system("pip install leidenalg")
 # py_install("pandas")
-set.seed(99)
-if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")
-if(!require("remotes", quietly = T)) install.packages("remotes")
-if (!require("harmony", quietly = TRUE)) BiocManager::install("harmony", force = T)
-install.packages("Rcpp", force = T)
-library(harmony)
-library(tidyverse)
-library(sctransform)
-if (!require("glmGamPoi", quietly = T)) BiocManager::install("glmGamPoi")
-library(glmGamPoi)
-library(ggplot2)
-if(!require("future", quietly = T)) install.packages("future")
-library(future)
-library(purrr)
-if(!require("leidenAlg", quietly= T)) install.packages("leidenAlg")
-library(leidenAlg)
-if(!require("DoubletFinder", quietly= T)) remotes::install_github("chris-mcginnis-ucsf/DoubletFinder")
-library(DoubletFinder)
-if(!require("reticulate", quietly= T)) install.packages("reticulate")
-library(reticulate)
-library(Seurat)
+# set.seed(99)
+# if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+# if(!require("remotes", quietly = T)) install.packages("remotes")
+# library(Seurat)
+# if (!require("harmony", quietly = TRUE)) BiocManager::install("harmony")
+# library(harmony)
+# library(tidyverse)
+# library(sctransform)
+# BiocManager::install("glmGamPoi")
+# if (!require("glmGamPoi", quietly = T)) BiocManager::install("glmGamPoi")
+# library(glmGamPoi)
+# library(ggplot2)
+# if(!require("future", quietly = T)) install.packages("future")
+# library(future)
+# library(sctransform)
+# library(purrr)
+# if(!require("leidenAlg", quietly= T)) install.packages("leidenAlg")
+# library(leidenAlg)
+# remotes::install_github("chris-mcginnis-ucsf/DoubletFinder")
+# library(DoubletFinder)
+# if(!require("leidenAlg", quietly= T)) install.packages("reticulate")
+# library(reticulate)
 
-project <- "SPLEEN"
-fileType <- "nomid-exact-p10-51x71"
-multRate <- 0.1 # Mulitplet rate calculated from all 4 lanes 15.12%
+
+project <- "cocci-"
+fileType <- "exact-p10-51x71"
+multRate <- 0.05 # Mulitplet rate calculated from all 4 lanes 15.12%
 rnaPCs <- 20
 adtPCs <- 20
-n <- 50     # Let variables reach up to n GB
+n <- 40     # Let variables reach up to n GB
 options(future.globals.maxSize= n * 1e9)  # x * 1e9 = x GB
-resRange <- seq(0.3, 0.5, by = 0.1)
+resRange <- seq(0.3, 0.6, by = 0.1)
 # FindCluster(alg = 1:  Louvain | fast & effective but not for complex datasets,
 #                   2:  Refined Louvain | multilevel refined clusters but computationally heavier,
 #                   3:  Smart Local Moving (SLM) | Louvain w/ more granularity, slower but good for complex datasets
@@ -45,20 +45,19 @@ wkdir <- getwd()
 
 
 ##### RENAME ABSEQ
-# NOMID
-rownames(list[[1]]@assays$ADT)
-new_names <- c("CD105", "CD115", "CD117", "CD11a", "CD11b", "CD11c", "CD162", "CD16/32", "CD184", "CD19",
-               "CD335", "CD41", "CD45", "CD48", "CD62L", "CD71", "CXCR2", "Clec7a", "CD150", "F4/80", "Ly6A/E",
+# COCCI
+#rownames(rds@assays$ADT@data)
+new_names <- c("CD105", "CD115", "CD117", "CD11a", "CD11b", "CD11c", "CD162", "CD16/32", "CD184", "CD19", "CD31",
+               "CD326", "CD335", "CD41", "CD45", "CD48", "CD62L", "CD71", "CXCR2", "Clec7a", "CD150", "F4/80", "Ly6A/E",
                "Ly6G", "NK1.1", "SiglecF", "TCRb", "TER119")
-rds_files <- list.files(path = paste0(wkdir, "/samples"), pattern = paste0(project), full.names = TRUE)
+rds_files <- list.files(path = paste0(wkdir, "/samples"), pattern = paste0("\\-mouseCocci-LUNG-exact50k.rds$"), full.names = TRUE)
 print(rds_files)
 list <- list()
 list <- map(rds_files, readRDS)
 
 # QC and Rename ADT
-#TODO seurat_object$Infected_Status <- ifelse(grepl("infected", seurat_object$orig.ident), "infected", "not_infected")
-
-pdf(paste(project, fileType, "VlnPlot.pdf", sep = "-"))
+pdf(paste0(project, "-", fileType, "_VlnPlot.pdf"))
+#features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "percent.cocci")
 features = c("nFeature_RNA", "nCount_RNA", "percent.mt")
 for (i in seq_along(list)){
   temp <- list[[i]]@assays$ADT@counts
@@ -67,18 +66,19 @@ for (i in seq_along(list)){
   rm(temp)
   list[[i]][["percent.mt"]] <- PercentageFeatureSet(list[[i]], pattern = "mt-")
   #list[[i]][["percent.cocci"]] <- PercentageFeatureSet(list[[i]], pattern = "CIMG")
-  print(VlnPlot(list[[i]], features = features, pt.size = 0.01, ncol = length(features)) & 
-          theme(axis.text.x = element_blank()) & labs(x = list[[i]]$orig.ident))
+  print(VlnPlot(list[[i]], features = features, pt.size = 0.01, ncol = length(features), same.y.lims = T) & 
+    theme(axis.text.x = element_blank()) & labs(list[[i]]$orig.ident))
 }
 dev.off()
 
 # Set QC thresholds
-nFeatLower <- 800
-nFeatUpper <- 6000
+nFeatLower <- 300
+nFeatUpper <- 4000
 nCountLower <- 150
-nCountUpper <-30000
+nCountUpper <-15000
 mtPct <- 20
-pdf(paste(project, fileType, "QCdVlnPlot.pdf", sep = "-"))
+features = c("nFeature_RNA", "nCount_RNA", "percent.mt")
+pdf(paste0(project, "-", fileType, "_QCdVlnPlot.pdf"))
 for (i in seq_along(list)){
   list[[i]] <- subset(list[[i]], subset = nFeature_RNA > nFeatLower & nFeature_RNA < nFeatUpper &
                         nCount_RNA > nCountLower & nCount_RNA < nCountUpper)
@@ -86,16 +86,13 @@ for (i in seq_along(list)){
           theme(axis.text.x = element_blank()) & labs(x=list[[i]]$orig.ident))
 }
 dev.off()
-
 write(paste0(project, " -> Seurat list QCd and built!\n"), file = "LOG.txt", append = TRUE)
 gc()
 
 # RNA Normalization -----------------------------------------
 for (i in seq_along(list)){
   DefaultAssay(list[[i]]) <- 'RNA'
-  list[[i]] <- SCTransform(list[[i]], method = "glmGamPoi", vars.to.regress = "percent.mt", verbose = F) %>%
-    RunPCA(npcs = rnaPCs, verbose = F)
-  print(paste("SCT done", count))
+  list[[i]] <- SCTransform(list[[i]], method = "glmGamPoi", vars.to.regress = "percent.mt", verbose = F)
 }
 gc()
 
@@ -109,10 +106,10 @@ gc()
 combinedRNA <- RunPCA(combinedRNA, npcs = rnaPCs, verbose = FALSE)
 combinedRNA <- RunUMAP(combinedRNA, reduction = "pca", reduction.name = "rna.umap",
                        reduction.key = 'rnaUMAP_', dims = 1:rnaPCs)
-saveRDS(combinedRNA, file = paste(project, fileType, "RNASCT.RDS", sep = "-"))
+saveRDS(combinedRNA, file = paste0(project,"-", fileType, "_RNASCT.RDS"))
 write(paste0(Sys.time(), " -> RNA SCTransform and integration done and saved!\n"), file = "LOG.txt", append = TRUE)
 #PRINT
-pdf(paste(project, fileType, "RNAUMAP.pdf", sep = "-"))
+pdf(paste0(project, "-", fileType, "_RNAUMAP.pdf"))
 print(DimPlot(object = combinedRNA, reduction = "rna.umap", pt.size = 0.4, group.by = "orig.ident") + NoLegend())
 idents <- unique(combinedRNA$orig.ident)
 for (i in seq_along(idents)){
@@ -148,10 +145,10 @@ combinedADT <- ScaleData(combinedADT, verbose = FALSE)
 combinedADT <- RunPCA(combinedADT, npcs = adtPCs, reduction.name = 'apca', verbose = FALSE, approx = FALSE)
 combinedADT <- RunUMAP(combinedADT, reduction = "apca", reduction.name = "adt.umap",
                        reduction.key = 'adtUMAP_', dims = 1:adtPCs)
-saveRDS(combinedADT, file = paste(project, fileType, "ADTNormalized.RDS", sep = "-"))
+saveRDS(combinedADT, file = paste0(project, "-", fileType, "_ADTNormalized.RDS"))
 write(paste0(Sys.time(), " -> ADT & RNA independent normalization done and saved!\n"), file = "LOG.txt", append = TRUE)
 #PRINT
-pdf(paste(project, fileType, "ADTUMAP.pdf", sep = "-"))
+pdf(paste0(project,"-", fileType, "_ADTUMAP.pdf"))
 print(DimPlot(object = combinedADT, reduction = "adt.umap", pt.size = 0.4, group.by = "orig.ident"))
 dev.off()
 write(paste0(Sys.time(), " -> ADT normalization and integration done and saved!\n"), file = "LOG.txt", append = TRUE)
@@ -175,13 +172,13 @@ harmony <- Embeddings(combinedRNA, "harmony")
 combinedRNA[["harmony_ADT"]] <- CreateDimReducObject(harmony, key = "harmonyADT_", assay = "ADT")
 
 # PRINT results
-pdf(paste(project, fileType, "harmony.pdf", sep = "-"))
+pdf(paste0(project, "-harmony.pdf"))
 DimPlot(combinedRNA, reduction = "harmony_RNA", group.by = "orig.ident")
 DimPlot(combinedRNA, reduction = "harmony_ADT", group.by = "orig.ident")
 dev.off()
 
 # SAVE!
-saveRDS(combinedRNA, file = paste(project, fileType, "integrated.RDS", sep = "-"))
+saveRDS(combinedRNA, file = paste0(project,"-", fileType, "_integrated.RDS"))
 write(paste0(Sys.time(), " -> RNA & ADT INTEGRATION successful, saved before WNN!\n"), file = "LOG.txt", append = TRUE)
 rm(combinedADT)
 rm(harmony)
@@ -225,46 +222,35 @@ gc()
 ## WNN graph: combinedRNA[["wknn"]],
 ## SNN graph used for clustering: combinedRNA[["wsnn"]]
 ## Cell-specific modality weights: combinedRNA$RNA.weight
-DefaultAssay(combinedRNA) <- "integrated"
-rds <- combinedRNA
+DefaultAssay(combinedRNA) <- "RNA"
 rds <- FindVariableFeatures(combinedRNA, assay = "RNA", selection.method = "vst", nfeatures = 2000)
 rds <- FindNeighbors(rds, dims = 1:rnaPCs, graph.name = "RNA_nn")
 rds <- RunUMAP(rds, dims = 1:rnaPCs)
-rm(combinedRNA)
 for (res in resRange) {
   rds <- FindClusters(rds, algorithm = clusterAlg, resolution = res, graph.name = "RNA_nn", verbose = FALSE)
-  saveRDS(rds, file= paste(project, fileType, res, "RNAClust.rds", sep = "-"))
+  saveRDS(rds, file= paste0(project, "-", fileType, "-RNAClust", res, ".rds"))
   gc()
   #PRINT
-  pdf(paste(project, fileType, res, "RNAWNNUMAP.pdf", sep = "-"))
+  pdf(paste0(project, "-", res, "_RNAWNNUMAP.pdf"))
   print(DimPlot(rds, reduction = 'rna.umap', label = TRUE, repel = TRUE, label.size = 2.5) +
-          labs(title = paste("RNA WNN UMAP", clusterKey[clusterAlg], res, ":", project)))
-  idents <- unique(rds$orig.ident)
-  for (i in seq_along(idents)){
-    sample <- subset(rds, subset = orig.ident == idents[i])
-    print(DimPlot(rds, reduction = "rna.umap", cells.highlight = Cells(sample)) + NoLegend() + 
-            labs(title = paste("RNA UMAP Louvian res:", res, ":", project, " ", idents[i])))
-  }
+          NoLegend() + labs(title = paste("RNA WNN UMAP", clusterKey[clusterAlg], res, ":", project)))
   dev.off()
-  write.csv(t(table(Idents(rds))), file=paste(project, fileType, res, "RNAClust.csv", sep = "-"))
 }
 write(paste0(Sys.time(), " -> RNA ONLY multi res clustering done! Ready for preview!\n"), file = "LOG.txt", append = TRUE)
 
 # RNA & ADT WNN -----------------------------------------
-rds <- combinedRNA
-rds <- FindVariableFeatures(combinedRNA, assay = "RNA", selection.method = "vst", nfeatures = 2000)
+rds <- FindVariableFeatures(rds, assay = "RNA", selection.method = "vst", nfeatures = 500)
 rds <- FindMultiModalNeighbors(rds, reduction.list = list("pca", "apca"),
                                dims.list = list(1:rnaPCs, 1:adtPCs), modality.weight.name = "integrated.weight")
 rds <- RunUMAP(rds, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
 for (res in resRange) {
   rds <- FindClusters(rds, graph.name = "wsnn", algorithm = clusterAlg, resolution = res, verbose = FALSE)
-  saveRDS(rds, file= paste(project, fileType, res, "WNN.rds", sep = "-"))
+  saveRDS(rds, file= paste0(project, "-WNN", res, ".rds"))
   gc()
   #PRINT
-  pdf(paste(project, fileType, res, "WNNUMAP.pdf", sep = "-"))
+  pdf(paste0(project, "-", res, "_WNNUMAP.pdf"))
   print(DimPlot(rds, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 2.5) +
           NoLegend() + labs(title = paste("ADT&RNA WNN UMAP", clusterKey[clusterAlg], res, ":", project)))
   dev.off()
-  write.csv(t(table(Idents(rds))), file=paste(project, fileType, res, "WNNUMAP.csv", sep = "-"))
 }
 write(paste0(Sys.time(), " -> RNA & ADT multi res clustering done! Ready for preview!\n"), file = "LOG.txt", append = TRUE)
