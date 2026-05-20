@@ -601,3 +601,87 @@ DimPlot(rds, reduction = "wnn.umap",group.by = "annotations", raster = F, label 
   # Make legend 1 column and adjust dot size
   guides(color = guide_legend(ncol = 1, override.aes = list(size = 5)))
 dev.off()
+
+
+# Custom order dotplots ####
+## Neuts ####
+custom <- c("NeP",
+            "Pre-Neutrophil",
+            "Immature Neutrophil",
+            "Brain Mature Neutrophil",
+            "Spleen Mature Neutrophil",
+            "Aged Neutrophil",
+            "Eosinophil"
+            )
+# order the cell types
+Idents(rds) <- factor(Idents(rds), levels = rev(custom))
+rds$annotations <- Idents(rds)
+
+rds$anno.geno <-  paste(rds$annotations, rds$geno)
+Idents(rds)<- "anno.geno"
+levels(Idents(rds))
+custom <- c("NeP NM",
+            "NeP WT",
+            "Pre-Neutrophil NM",
+            "Pre-Neutrophil WT",           
+            "Immature Neutrophil NM",
+            "Immature Neutrophil WT",
+            "Spleen Mature Neutrophil NM",
+            "Spleen Mature Neutrophil WT", 
+            "Brain Mature Neutrophil NM",
+            "Brain Mature Neutrophil WT",
+            "Aged Neutrophil NM",
+            "Aged Neutrophil WT",
+            "Eosinophil NM",
+            "Eosinophil WT"
+            )
+# order the cell types
+Idents(rds) <- factor(Idents(rds), levels = rev(custom))
+rds$anno.geno <- Idents(rds)
+
+## Endo ####
+rds$anno.geno <- paste(rds$annotations, rds$geno)
+Idents(rds) <- "anno.geno"
+levels(Idents(rds))
+custom <- c("Endothelial Healthy NM",
+            "Endothelial Healthy WT",   
+            "Endothelial Inflammed NM", 
+            "Endothelial Inflammed WT", 
+            "Endothelial Mitotic NM",
+            "Endothelial Mitotic WT",
+            "Endothelial Artery NM",    
+            "Endothelial Artery WT"
+            )
+# order the cell types
+Idents(rds) <- factor(Idents(rds), levels = rev(custom))
+rds$anno.geno <- Idents(rds)
+
+## Micro ####
+custom <- c("Microglial Progenitor",
+            "M1 Microglia",
+            "M2 Microglia",
+            "Microglia Endothelial",
+            "Vascular Endothelial"
+            )
+# order the cell types
+Idents(rds) <- factor(Idents(rds), levels = rev(custom))
+rds$annotations <- Idents(rds)
+
+
+rds$anno.geno <- paste(rds$annotations, rds$geno)
+Idents(rds) <- "anno.geno"
+levels(Idents(rds))
+custom <- c("Microglial Progenitor NM",
+            "Microglial Progenitor WT",
+            "M1 Microglia NM",
+            "M1 Microglia WT",
+            "M2 Microglia NM",
+            "M2 Microglia WT",
+            "Microglia Endothelial NM",
+            "Microglia Endothelial WT",
+            "Vascular Endothelial NM",
+            "Vascular Endothelial WT"
+            )
+# order the cell types
+Idents(rds) <- factor(Idents(rds), levels = rev(custom))
+rds$anno.geno <- Idents(rds)

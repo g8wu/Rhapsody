@@ -193,26 +193,28 @@ grep("GBP", rownames(rds), value = T)
 #write.csv(grep("Il", rds_genes, value = T), file = "cytokinesInBraindata.csv")
 
 ## DotPlot ####
-listName <- "Neuts_subclust"
-Idents(rds) <- "anno.cond"
-group <- "annotations"
-n = 4
+listName <- "Microglia-geno-v1"
+group <- "anno.geno"
+w = 10
+h = 6
+n = 2
 Idents(rds) <- group
+table(Idents(rds))
 DefaultAssay(rds) <- "SCT"
 genes <- read.csv(paste0(listName, ".csv"), header = T, na.strings = "") %>% lapply(function(column) {column[!is.na(column) & column != ""]})
 names <- names(genes)
 
 # PRINT
-pdf(paste(rds@project.name, listName, group, "Dot.pdf", sep = "-"), width = 12, height = 4)
+pdf(paste0(rds@project.name , "-Dot-", listName, "-", group, ".pdf"), width = w, height = h)
 for (col in names){
   print(col)
   print(DotPlot(rds, features = genes[[col]], cols = "RdYlBu", col.min = 0, dot.scale = 5) +
           #coord_flip() + 
           geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5) +
-          ggtitle(col) +
-          theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.text.y = element_text(hjust = 0)) 
+          ggtitle(paste0(col, " | width: ", w, " height: ", h)) +
+          theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.text.y = element_text(hjust = 0)) +
         # geom_hline(yintercept = seq(n-1.5, length(unique(Idents(rds))) - 0.5, by = n), color = "black", linetype = "dashed") +
-        # geom_hline(yintercept = seq(n+0.5, length(unique(Idents(rds))) - 0.5, by = n), color = "black")
+        geom_hline(yintercept = seq(n+0.5, length(unique(Idents(rds))) - 0.5, by = n), color = "black")
         # geom_hline(yintercept = custom, color = "black")
   )
 }
