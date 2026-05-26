@@ -119,10 +119,16 @@ for (col in names){
 dev.off()
 
 # CellChat ####
+if(!require("ComplexHeatmap", quietly = T)) BiocManager::install("ComplexHeatmap")
+if (!require("CellChat", quietly = TRUE)) {
+  BiocManager::install("BiocNeighbors")
+  devtools::install_github("jinworks/CellChat")
+}
 library(CellChat)
+library(patchwork)
+library(circlize)
 library(ComplexHeatmap)
 library(grid)
-library(circlize)
 
 Idents(rds) <- "condition"
 idents <- levels(Idents(rds))

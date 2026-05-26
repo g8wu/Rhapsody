@@ -159,7 +159,37 @@ for (i in paths){
 dev.off()
 
 ## Compare Cellchat ####
+c1 <- readRDS("~/nomid/Nomid-WNN-adtNorm-CC-Brain NM.rds")
+c2 <- readRDS("~/nomid/Nomid-WNN-adtNorm-CC-Brain WT.rds")
+c3 <- readRDS("~/nomid/Nomid-WNN-adtNorm-CC-Spleen NM.rds")
+c4 <- readRDS("~/nomid/Nomid-WNN-adtNorm-CC-Spleen WT.rds")
 
+# list(A, B) RED = UPREG in B, BLUE = DOWNREG in A
+list <- list(BrainWT = c2, BrainNM= c1)
+#list <- list(SpleenWT = c4, SpleenNM= c3)
+
+cellchat <- mergeCellChat(list, add.names = names(list))
+
+pdf("BrainNMvsWT-CC-barplot")
+compareInteractions(cellchat, show.legend = F)
+compareInteractions(cellchat, show.legend = F)
+par(mfrow = c(1,2), xpd=TRUE)
+dev.off()
+
+pdf("BrainNMvsWT-CC.pdf", width = 10, height = 5)
+netVisual_diffInteraction(cellchat, weight.scale = T, title.name = "Number of Interactions")
+netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", title.name = "Weight of Interactions")
+gg1 <- netVisual_heatmap(cellchat)
+gg2 <- netVisual_heatmap(cellchat, measure = "weight")
+gg1 + gg2
+dev.off()
+
+
+weight.max <- getMaxWeight(list, attribute = c("idents","count"))
+par(mfrow = c(1,2), xpd=TRUE)
+for (i in 1:length(list)) {
+  netVisual_circle(list[[i]]@net$count, weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], edge.width.max = 12, title.name = paste0("Number of interactions - ", names(list)[i]))
+}
 # Monocle3 ##########
 # Need to use LJI monocle3 environment for specific package downgrades
 library(Seurat)
