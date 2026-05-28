@@ -2,7 +2,7 @@
 # Tutorial: https://www.bioconductor.org/packages/release/bioc/vignettes/scRepertoire/inst/doc/vignette.html
 if(!require("scRepertoire")) {
   remotes::install_github("ncborcherding/immApex")
-  remotes::install_github("ncborcherding/scRepertoire")
+  BiocManager::install("scRepertoire")
 }
 n
 if(!require("BiocStyle")) {BiocManager::install("BiocStyle")}
@@ -22,12 +22,12 @@ S1 <- read.delim("C104-exact-poly10-51x71_VDJ_Dominant_Contigs_AIRR.tsv")
 S2 <- read.delim("_1_C105-exact-poly10-51x71_VDJ_Dominant_Contigs_AIRR.tsv")
 S3 <- read.delim("C114-expected-poly10-51x71_VDJ_Dominant_Contigs_AIRR.tsv")
 
-contig.list <- list(S1)
+contig.list <- list(S1, S2, S3)
 contig.list <- loadContigs(input = contig.list, format = "BD")
 
 # Separate TCR and BCR ####
 ## BCR --------------------------------
-airrBCR <- subset(S1, locus %in% c("IGH", "IGK", "IGL"))
+airrBCR <- subset(contig.list, locus %in% c("IGH", "IGK", "IGL"))
 contigBCR <- list(airrBCR) %>% loadContigs(format = "BD")
 combinedBCR <- combineBCR(contigBCR, samples = "", ID = "")
 

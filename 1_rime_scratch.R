@@ -1,17 +1,124 @@
-# CellChat ######################
-# Tutorial: https://htmlpreview.github.io/?https://github.com/sqjin/CellChat/blob/master/tutorial/CellChat-vignette.html#part-i-data-input-processing-and-initialization-of-cellchat-object
-# Manual: https://www.rdocumentation.org/packages/CellChat/versions/1.0.0
-if(!require("ComplexHeatmap", quietly = T)) BiocManager::install("ComplexHeatmap")
-if (!require("CellChat", quietly = TRUE)) {
-  BiocManager::install("BiocNeighbors")
-  devtools::install_github("jinworks/CellChat")
-}
-library(CellChat)
-library(patchwork)
-library(circlize)
-library(ComplexHeatmap)
-library(grid)
+# RIME SCRATCH ####
+set.seed(99)
+library(Seurat)
+library(dplyr)
+n <- 50     # Let variables reach up to n GB
+options(future.globals.maxSize= n * 1e9)  # x * 1e9 = x GB
+# Metadata ####
+C39 <- readRDS("~/Projects/Rime/samples/C39-allfiles-basic-poly10-51x71_Seurat.rds")
+C98 <- readRDS("~/Projects/Rime/samples/C98-exact-poly10-51x71_Seurat.rds")
+C114 <- readRDS("~/Projects/Rime/samples/C114-expected-poly10-51x71_Seurat.rds")
+C119 <- readRDS("~/Projects/Rime/samples/C119-exact-poly10-51x71_Seurat.rds")
+C120 <- readRDS("~/Projects/Rime/samples/C120-exact-poly10-51x71_Seurat.rds")
+## Patient ####
+C39$patient <- case_when(
+  C39$orig.ident == "C39-allfiles-basic-poly10-51x71_Seurat.rds" ~ "RIM01"
+)
 
+C98$patient <- case_when(
+  C98$Sample_Tag == "SampleTag12_hs" ~ "RIM02",
+  C98$Sample_Tag == "SampleTag01_hs" ~ "RIM02",
+  TRUE ~ "Undetermined" # Preserve existing annotations for cells that don't match
+)
+
+C119$patient <- case_when(
+  C119$Sample_Tag == "SampleTag06_hs" ~ "RIM04",
+  C119$Sample_Tag == "SampleTag07_hs" ~ "RIM04",
+  C119$Sample_Tag == "SampleTag08_hs" ~ "RIM05",
+  C119$Sample_Tag == "SampleTag09_hs" ~ "RIM05",
+  C119$Sample_Tag == "SampleTag10_hs" ~ "RIM05",
+  TRUE ~ "Undetermined" # Preserve existing annotations for cells that don't match
+)
+
+C120$patient <- case_when(
+  C120$Sample_Tag == "SampleTag06_hs" ~ "RIM03",
+  C120$Sample_Tag == "SampleTag07_hs" ~ "RIM03",
+  C120$Sample_Tag == "SampleTag08_hs" ~ "RIM06",
+  C120$Sample_Tag == "SampleTag09_hs" ~ "RIM06",
+  TRUE ~ "Undetermined" # Preserve existing annotations for cells that don't match
+)
+
+C114$patient <- case_when(
+  C114$Sample_Tag == "SampleTag01_hs" ~ "H01",
+  C114$Sample_Tag == "SampleTag02_hs" ~ "H04",
+  C114$Sample_Tag == "SampleTag03_hs" ~ "H05",
+  C114$Sample_Tag == "SampleTag04_hs" ~ "H06",
+  TRUE ~ "Undetermined" # Preserve existing annotations for cells that don't match
+)
+## Condition ####
+C39$condition <- case_when(
+  C39$Sample_Tag == "SampleTag01_hs" ~ "Act",
+  C39$Sample_Tag == "SampleTag03_hs" ~ "Rec",
+  TRUE ~ "Undetermined" # Preserve existing annotations for cells that don't match
+)
+
+C98$condition <- case_when(
+  C98$Sample_Tag == "SampleTag12_hs" ~ "Act",
+  C98$Sample_Tag == "SampleTag01_hs" ~ "Rec",
+  TRUE ~ "Undetermined" # Preserve existing annotations for cells that don't match
+)
+
+C119$condition <- case_when(
+  C119$Sample_Tag == "SampleTag06_hs" ~ "Act",
+  C119$Sample_Tag == "SampleTag07_hs" ~ "Rec",
+  C119$Sample_Tag == "SampleTag08_hs" ~ "Act",
+  C119$Sample_Tag == "SampleTag09_hs" ~ "Rec",
+  C119$Sample_Tag == "SampleTag10_hs" ~ "Act",
+  TRUE ~ "Undetermined" # Preserve existing annotations for cells that don't match
+)
+
+C120$condition <- case_when(
+  C120$Sample_Tag == "SampleTag06_hs" ~ "Act",
+  C120$Sample_Tag == "SampleTag07_hs" ~ "Rec",
+  C120$Sample_Tag == "SampleTag08_hs" ~ "Act",
+  C120$Sample_Tag == "SampleTag09_hs" ~ "Rec",
+  TRUE ~ "Undetermined" # Preserve existing annotations for cells that don't match
+)
+
+C114$condition <- case_when(
+  C114$Sample_Tag == "SampleTag01_hs" ~ "Hlt",
+  C114$Sample_Tag == "SampleTag02_hs" ~ "Hlt",
+  C114$Sample_Tag == "SampleTag03_hs" ~ "Hlt",
+  C114$Sample_Tag == "SampleTag04_hs" ~ "Hlt",
+  TRUE ~ "Undetermined" # Preserve existing annotations for cells that don't match
+)
+
+
+# Merge and subset ####
+list <- list(C39, C98, C114, C119, C120)
+rds <- merge(x = list[[1]], y = list[-1], project = "RIME")
+Idents(rds) <- rds$condition
+table(Idents(rds))
+table(rds$condition)
+table(rds$patient)
+
+# Remove Undetermined
+rds <- subset(rds, idents = c("Rec", "Act", "Hlt"))
+
+# Sample Type ####
+rds$sample_type <- case_when(
+  rds$orig.ident == "C119-exact-poly10-51x71" & rds$Sample_Tag == "SampleTag10_hs" ~ "BF",
+  TRUE ~ "PBMC"
+)
+table(rds$sample_type)
+
+# SAVE!!
+saveRDS(rds, "Rime.rds")
+# Select res ####
+rds@misc$umap <- "harmony_umap"
+rds$seurat_clusters <- rds$SCT_snn_res.0.5
+Idents(rds) <- rds$seurat_clusters
+# order by numeric value
+Idents(rds) <- factor(Idents(object = rds), levels = sort(as.numeric(levels(rds))))
+rds$seurat_clusters <- Idents(rds)
+
+# UMAPs post annotation ####
+pdf(paste0(rds@project.name,"-UMAP.pdf"))
+DimPlot(rds, reduction = rds@misc$umap, label = T,raster = F, group.by = "annotations", repel = 2) + NoLegend()
+DimPlot(rds, reduction = rds@misc$umap,raster = F, group.by = "annotations", split.by = "condition", ncol = 2) + NoLegend()
+dev.off()
+
+# CellChat ####
 Idents(rds) <- "condition"
 idents <- levels(Idents(rds))
 idents
@@ -25,12 +132,18 @@ for (cond in idents){
   labels <- Idents(sub)
   meta <- data.frame(group = labels, row.names = names(labels))
   cellchat <- createCellChat(object = data.input, meta = meta, group.by = "group")
+  cellchat@idents <- factor(cellchat@idents, levels = all.types)
   
   # Set CellChat database
   #CellChatDB <- CellChatDB.mouse  # mouse data
   CellChatDB <- CellChatDB.human  # human data
   showDatabaseCategory(CellChatDB)
   cellchat@DB <- CellChatDB
+  
+  # Keep all identities
+  all.types <- levels(cellchat@idents)
+  cellchat@idents <- factor(cellchat@idents, levels = all.types)
+  cellchat@idents <- droplevels(cellchat@idents)
   
   # Subset data
   cellchat <- subsetData(cellchat)
@@ -60,7 +173,7 @@ for (cond in idents){
   idents <- unique(cellchat@idents)
   
   # Print network circles
-  pdf(paste0(sub@project.name, "-CC",cond, ".pdf"), width = 8, height = 8)
+  pdf(paste0(sub@project.name, "-CC-",cond, ".pdf"), width = 8, height = 8)
   par(mfrow = c(1,1), xpd=T)
   netVisual_circle(cellchat@net$count, vertex.weight = groupSize, weight.scale = T,
                    vertex.size = 4, vertex.label.cex = 1, arrow.size = 0.8,
@@ -93,98 +206,14 @@ dev.off()
 
 
 ## Circle ####
+# Check sources index
+levels(cellchat@ident)
 pdf(paste0(rds@project.name, "-CCsignal.pdf"))
 for (p in paths){
   netVisual_aggregate(cellchat, signaling = p, layout = "circle")
   title(paste(rds@project.name, p))
 }
 dev.off()
-### Print by Cell Type ####
-idents <- levels(cellchat@idents)
-idents
-pdf(paste0(rds@project.name, "-CC-cellType.pdf"), width = 8, height = 8)
-# choose grid size based on number of pathways
-n <- length(idents)
-nrow <- ceiling(sqrt(n))
-ncol <- ceiling(n / nrow)
-
-par(mfrow = c(nrow, ncol),
-    mar = c(0, 0, 0, 0),
-    oma = c(0, 0, 3, 0))  # small margins
-for(ident in idents) {
-  print(ident)
-  tryCatch({
-    netVisual_aggregate(cellchat, layout = "circle", signaling = paths, sources.use = ident)
-  }, error = function(x) {
-    message("Skipping: ", conditionMessage(x))
-  })
-  mtext(cond, outer = T, cex = 3)
-}
-dev.off()
-
-## CC Dot ####
-paths <- cellchat@netP$pathways
-
-pdf(paste0(sub@project.name, "-CCdot-",cond, ".pdf"), width = 12, height = 12)
-netVisual_bubble(cellchat, #sources.use = brainNeuts, targets.use = idents, 
-                 signaling = paths, title = paste(cond, "L-R Interactions"), remove.isolate = FALSE) +
-  theme(axis.text.y = element_text(hjust = 0))
-dev.off()
-
-
-## Chord Diagram ####
-### Print by path ####
-pdf(paste0(rds@project.name, "-CCchord-path.pdf"), width = 16, height = 16)
-# choose grid size based on number of pathways
-n <- length(paths)
-nrow <- ceiling(sqrt(n))
-ncol <- ceiling(n / nrow)
-
-par(mfrow = c(nrow, ncol),
-    mar = c(0, 0, 0, 0),
-    oma = c(0, 0, 3, 0))  # small margins
-for(path in paths) {
-  print(path)
-  tryCatch({
-    netVisual_aggregate(cellchat, signaling = path, layout = "chord" )  
-  }, error = function(x) {
-    message("Skipping: ", conditionMessage(x))
-  })
-  mtext(rds@project.name, outer = T, cex = 3)
-}
-dev.off()
-
-## Compare Cellchat ####
-# https://rdrr.io/github/sqjin/CellChat/f/tutorial/Comparison_analysis_of_multiple_datasets.Rmd
-act <- readRDS("~/rime/CellChat/RIME-anno-CC-Act.rds")
-hlt <- readRDS("~/rime/CellChat/RIME-anno-CC-Hlt.rds")
-rec <- readRDS("~/rime/CellChat/RIME-anno-CC-Rec.rds")
-
-# list(A, B) RED = UPREG in B, BLUE = DOWNREG in A
-list <- list(Healthy = hlt, Active = act)
-
-cellchat <- mergeCellChat(list, add.names = names(list))
-
-pdf(paste0(rds@project.name, "-CC-barplot-ActvsHlt.pdf"))
-compareInteractions(cellchat, show.legend = F)
-compareInteractions(cellchat, show.legend = F)
-par(mfrow = c(1,2), xpd=TRUE)
-dev.off()
-
-pdf(paste0(rds@project.name, "-CC-ActvsHlt.pdf"), width = 10, height = 5)
-netVisual_diffInteraction(cellchat, weight.scale = T, title.name = "Number of Interactions")
-netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", title.name = "Weight of Interactions")
-gg1 <- netVisual_heatmap(cellchat)
-gg2 <- netVisual_heatmap(cellchat, measure = "weight")
-gg1 + gg2
-dev.off()
-
-
-weight.max <- getMaxWeight(list, attribute = c("idents","count"))
-par(mfrow = c(1,2), xpd=TRUE)
-for (i in 1:length(list)) {
-  netVisual_circle(list[[i]]@net$count, weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], edge.width.max = 12, title.name = paste0("Number of interactions - ", names(list)[i]))
-}
 
 ## Compare Cellchat ####
 # https://rdrr.io/github/sqjin/CellChat/f/tutorial/Comparison_analysis_of_multiple_datasets.Rmd
