@@ -48,10 +48,10 @@ setwd("/mnt/bioadhoc/Groups/Collaborators/ben.croker/nomid")
 
 #  Annotate ####################
 Idents(rds) <- rds$seurat_clusters
-anno <- read.csv(paste0("Dress_HC-BeC-anno.csv"), header = FALSE)
+anno <- read.csv(paste0("RIME_basicAnno.csv"), header = FALSE)
 annotations <- setNames(anno[, 2], anno[, 1])
 rds <- RenameIdents(rds, annotations)
-rds$seurat_clusters <- Idents(rds)
+rds$basicAnno <- Idents(rds)
 table(Idents(rds))
 
 # alphabetize the cell types
@@ -216,7 +216,7 @@ original <- rds
 Idents(original) <- original$basicAnno
 idents <- levels(Idents(original))
 idents
-resRange <- seq(0.05, 0.2, by = 0.05)
+resRange <- seq(0.1, 0.4, by = 0.1)
 alg <- 4
 rnaPCs <- 30
 adtPCs <- 20
@@ -251,36 +251,45 @@ for (cluster in idents) {
   # DefaultAssay(rds) <- "SCT"
   
   ## ADTnorm #####
-  print("____________________________________________ ADTnorm start")
-  cell_x_adt <- t(rds@assays$ADT@counts)
-  cell_x_feature <- data.frame(rds@active.ident)
+  # print("____________________________________________ ADTnorm start")
+  # cell_x_adt <- t(rds@assays$ADT@counts)
+  # cell_x_feature <- data.frame(rds@active.ident)
+  # 
+  # # Make sure there is a 'sample' column set to an ident
+  # colnames(cell_x_feature) <- 'sample'
+  # head(cell_x_feature)
+  # 
+  # cell_x_adt_norm = ADTnorm(
+  #   cell_x_adt = cell_x_adt, 
+  #   cell_x_feature = cell_x_feature, 
+  #   save_outpath = getwd(), 
+  #   study_name = rds@project.name,
+  #   marker_to_process = rownames(rds@assays$ADT),
+  #   bimodal_marker = NULL,             # default NULL: try different settings to find bimodal peaks
+  #   # trimodal_marker = c("CD45-F11-Ptprc"),       # CD4 and CD45RA tend to have 3 peaks
+  #   # setting the CD3 uni-peak of buus_2021_T study to positive peak if only one peak is detected for CD3 marker
+  #   # positive_peak = list(ADT = "CD3", sample = "buus_2021_T"), 
+  #   positive_peak = list(ADT = "CD19"), 
+  #   brewer_palettes = "Dark2",
+  #   save_fig = TRUE,
+  #   target_landmark_location = "fixed",
+  #   shoulder_valley = T,               # Look for "shoulder" as pos peak (technical variation -> no clear separation b/w neg/pos)
+  #   #multi_sample_per_batch = T,        # Omit aligning the one pos peak
+  #   #customize_landmark = T             # Manual adjustment UI 
+  # )
+  # 
+  # # Put ADTNorm matrix back into rds
+  # rds@assays$ADT@scale.data <- t(cell_x_adt_norm)
+  # print(paste(Sys.time(), "ADTnorm done"))
+  # 
   
-  # Make sure there is a 'sample' column set to an ident
-  colnames(cell_x_feature) <- 'sample'
-  head(cell_x_feature)
-  
-  cell_x_adt_norm = ADTnorm(
-    cell_x_adt = cell_x_adt, 
-    cell_x_feature = cell_x_feature, 
-    save_outpath = getwd(), 
-    study_name = rds@project.name,
-    marker_to_process = rownames(rds@assays$ADT),
-    bimodal_marker = NULL,             # default NULL: try different settings to find bimodal peaks
-    # trimodal_marker = c("CD45-F11-Ptprc"),       # CD4 and CD45RA tend to have 3 peaks
-    # setting the CD3 uni-peak of buus_2021_T study to positive peak if only one peak is detected for CD3 marker
-    # positive_peak = list(ADT = "CD3", sample = "buus_2021_T"), 
-    positive_peak = list(ADT = "CD19"), 
-    brewer_palettes = "Dark2",
-    save_fig = TRUE,
-    target_landmark_location = "fixed",
-    shoulder_valley = T,               # Look for "shoulder" as pos peak (technical variation -> no clear separation b/w neg/pos)
-    #multi_sample_per_batch = T,        # Omit aligning the one pos peak
-    #customize_landmark = T             # Manual adjustment UI 
-  )
-  
-  # Put ADTNorm matrix back into rds
-  rds@assays$ADT@scale.data <- t(cell_x_adt_norm)
-  print(paste(Sys.time(), "ADTnorm done"))
+  ## ADT ####
+  print("____________________________________________ ADT CLR Normalization")
+  abseq <- rownames(rds@assays$ADT)
+  DefaultAssay(rds) <- 'ADT'
+  rds <- NormalizeData(rds, normalization.method = 'CLR', margin = 2)
+  rds <- ScaleData(rds)
+  DefaultAssay(rds) <- "SCT"
   
   ## PCA ####
   rds <- RunPCA(rds, assay = "SCT", reduction.name = "pca_rna")
@@ -314,6 +323,8 @@ for (cluster in idents) {
   rds <- FindNeighbors(rds, dims = 1:rnaPCs, reduction = "harmony_rna")
   
   # Multi-res Clustering
+  resRange <- seq(0.1, 0.6, by = 0.1)
+  
   pdf(paste0(rds@project.name, "-UMAP-RNA.pdf"))
   for(res in resRange) {
     print(res)
@@ -326,111 +337,111 @@ for (cluster in idents) {
   print(paste0(Sys.time(), " -> RNA ONLY clustering done!"))
   
   ### RNA + ADT ####
-  print("_____________________ Starting RNA & ADT Clustering")
-  set.seed(99)
-  rds <- FindMultiModalNeighbors(rds, reduction.list = list("harmony_rna", "pca_adt"),
-                                 dims.list = list(1:rnaPCs, 1:adtPCs))
-  rds <- RunUMAP(rds, nn.name= "weighted.nn", reduction.name = "wnn.umap")
-  # Multi-res Clustering
-  pdf(paste0(rds@project.name, "-UMAP-RNAADT.pdf"))
-  for(res in resRange) {
-    print(res)
-    rds <- FindClusters(rds, algorithm = alg, resolution = res, graph.name = "wsnn")
-    print(DimPlot(rds, reduction= "wnn.umap", label = T, raster = F) + 
-            labs(title = paste0("ADT&RNA UMAP ", algKey[alg],": ", res)))
-  }
-  dev.off()
-  
+  # print("_____________________ Starting RNA & ADT Clustering")
+  # set.seed(99)
+  # rds <- FindMultiModalNeighbors(rds, reduction.list = list("harmony_rna", "pca_adt"),
+  #                                dims.list = list(1:rnaPCs, 1:adtPCs))
+  # rds <- RunUMAP(rds, nn.name= "weighted.nn", reduction.name = "wnn.umap")
+  # # Multi-res Clustering
+  # pdf(paste0(rds@project.name, "-UMAP-RNAADT.pdf"))
+  # for(res in resRange) {
+  #   print(res)
+  #   rds <- FindClusters(rds, algorithm = alg, resolution = res, graph.name = "wsnn")
+  #   print(DimPlot(rds, reduction= "wnn.umap", label = T, raster = F) + 
+  #           labs(title = paste0("ADT&RNA UMAP ", algKey[alg],": ", res)))
+  # }
+  # dev.off()
+  # 
   ## SAVE!! ####
   saveRDS(rds, file= paste0(rds@project.name, "-RNAADT.rds"))
   
-  print(paste0(Sys.time(), " -> RNA & ADT clustering done!"))
+  # print(paste0(Sys.time(), " -> RNA & ADT clustering done!"))
   
   ## QC FeatPlot ####
   features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "ADT_total")
   pdf(paste0(rds@project.name, "-QCUMAP.pdf"))
   print(FeaturePlot(rds, reduction = "harmony_umap", features = features, ncol = 2))
-  print(FeaturePlot(rds, reduction = "wnn.umap", features = features, ncol = 2))
+  # print(FeaturePlot(rds, reduction = "wnn.umap", features = features, ncol = 2))
   dev.off()
   
   ## Umap orig.ident ####
   pdf(paste(rds@project.name, "UMAP-batchEffectCheck.pdf", sep = "-"))
   print(DimPlot(rds, reduction = "harmony_umap", group.by = "orig.ident"))
-  print(DimPlot(rds, reduction = "harmony_umap", group.by = "geno"))
-  print(DimPlot(rds, reduction = "wnn.umap", group.by = "orig.ident"))
-  print(DimPlot(rds, reduction = "wnn.umap", group.by = "geno"))
+  print(DimPlot(rds, reduction = "harmony_umap", group.by = "condition"))
+  # print(DimPlot(rds, reduction = "wnn.umap", group.by = "orig.ident"))
+  # print(DimPlot(rds, reduction = "wnn.umap", group.by = "geno"))
   dev.off()
   
   ## Abseq Featplot #### 
   abseq <- rownames(rds@assays$ADT)
   
   # PRINT
-  pdf(paste(rds@project.name, "AbsFeats-RNA.pdf", sep = "-"), width = length(abseq) / 5 * 4.8, height = length(abseq) / 5 * 5)
-  rds@misc$umap <- "harmony_umap"
-  DefaultAssay(rds) <-"ADT"
-  plots <- FeaturePlot(rds, reduction = rds@misc$umap, features = abseq, ncol = 5) & 
-    theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
-          axis.text.x = element_blank(), axis.text.y = element_blank(), 
-          axis.ticks = element_blank())
-  DefaultAssay(rds) <-"SCT"
-  print(plots+ plot_annotation(title ="Abseq", theme = theme(plot.title = element_text(size =50))))
-  dev.off()
-  pdf(paste(rds@project.name, "AbsFeats-WNN.pdf", sep = "-"), width = length(abseq) / 5 * 4.8, height = length(abseq) / 5 * 5)
-  rds@misc$umap <- "wnn.umap"
-  DefaultAssay(rds) <-"ADT"
-  plots <- FeaturePlot(rds, reduction = rds@misc$umap, features = abseq, ncol = 5) & 
-    theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
-          axis.text.x = element_blank(), axis.text.y = element_blank(), 
-          axis.ticks = element_blank())
-  DefaultAssay(rds) <-"SCT"
-  print(plots+ plot_annotation(title ="Abseq", theme = theme(plot.title = element_text(size =50))))
-  dev.off()
+  # pdf(paste(rds@project.name, "AbsFeats-RNA.pdf", sep = "-"), width = length(abseq) / 5 * 4.8, height = length(abseq) / 5 * 5)
+  # rds@misc$umap <- "harmony_umap"
+  # DefaultAssay(rds) <-"ADT"
+  # plots <- FeaturePlot(rds, reduction = rds@misc$umap, features = abseq, ncol = 5) & 
+  #   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+  #         axis.text.x = element_blank(), axis.text.y = element_blank(), 
+  #         axis.ticks = element_blank())
+  # DefaultAssay(rds) <-"SCT"
+  # print(plots+ plot_annotation(title ="Abseq", theme = theme(plot.title = element_text(size =50))))
+  # dev.off()
+  # pdf(paste(rds@project.name, "AbsFeats-WNN.pdf", sep = "-"), width = length(abseq) / 5 * 4.8, height = length(abseq) / 5 * 5)
+  # rds@misc$umap <- "wnn.umap"
+  # DefaultAssay(rds) <-"ADT"
+  # plots <- FeaturePlot(rds, reduction = rds@misc$umap, features = abseq, ncol = 5) & 
+  #   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+  #         axis.text.x = element_blank(), axis.text.y = element_blank(), 
+  #         axis.ticks = element_blank())
+  # DefaultAssay(rds) <-"SCT"
+  # print(plots+ plot_annotation(title ="Abseq", theme = theme(plot.title = element_text(size =50))))
+  # dev.off()
   
 }
 
 # Subcluster pt2 ####
 ## Pick res ####
-rds$seurat_clusters<- rds$SCT_snn_res.0.05
+rds$seurat_clusters<- rds$SCT_snn_res.0.3
 rds@misc$umap <- "harmony_umap"
-rds@project.name <- paste0("CMP-GMP Progenitor-RNA")
+
 ## VlnPlot ####
 group <- "seurat_clusters"
 Idents(rds) <- group
-var2 <- "geno"
+var2 <- "condition"
 
-pdf(paste0(rds@project.name, "-", group, "-QCVln", ".pdf"), height = 15, width = 10)
-plots <- lapply(features[1:3], function(i) {
-  VlnPlot(rds, features = i, pt.size = 0)
-})
-# Switch to ADT to print ADT_total
-adtPlot <- VlnPlot(rds, features = features[4], pt.size = 0)
-plots <- c(plots, list(adtPlot))
-print(wrap_plots(plots, ncol = 2) & NoLegend() & 
-        theme(axis.text.x = element_text(angle = 90, hjust = 1)))
-dev.off()
-
-## Abseq dot ####
-abseq <- rownames(rds[["ADT"]])
-DefaultAssay(rds) <- "ADT"
-pdf(paste(rds@project.name, group, "AbseqDot.pdf", sep = "-"),width = 10, height = 6)
-DotPlot(rds, features = abseq, col.min = 0, cols = "RdYlBu", group.by = group) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.text.y = element_text(hjust = 0)) + 
-  ggtitle("AbSeq") + 
-  geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5)
-dev.off()
-DefaultAssay(rds) <- "SCT"
-
-## Abseq Ridge ####
-DefaultAssay(rds) <- "ADT"
-abseq <- rownames(rds@assays$ADT)
-plots <- RidgePlot(rds, features = abseq, stack = T) + NoLegend()
-pdf(paste0(rds@project.name, "-AbseqRidge.pdf"), width = 12, height = 5)
-print(plots + labs(title = paste("Abseq Ridge Plot:", group)) + 
-        theme(axis.text.y = element_text(hjust = 0))
-)
-dev.off()
-
-DefaultAssay(rds) <- "SCT"
+# pdf(paste0(rds@project.name, "-", group, "-QCVln", ".pdf"), height = 15, width = 10)
+# plots <- lapply(features[1:3], function(i) {
+#   VlnPlot(rds, features = i, pt.size = 0)
+# })
+# # Switch to ADT to print ADT_total
+# adtPlot <- VlnPlot(rds, features = features[4], pt.size = 0)
+# plots <- c(plots, list(adtPlot))
+# print(wrap_plots(plots, ncol = 2) & NoLegend() & 
+#         theme(axis.text.x = element_text(angle = 90, hjust = 1)))
+# dev.off()
+# 
+# ## Abseq dot ####
+# abseq <- rownames(rds[["ADT"]])
+# DefaultAssay(rds) <- "ADT"
+# pdf(paste(rds@project.name, group, "AbseqDot.pdf", sep = "-"),width = 10, height = 6)
+# DotPlot(rds, features = abseq, col.min = 0, cols = "RdYlBu", group.by = group) +
+#   theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.text.y = element_text(hjust = 0)) + 
+#   ggtitle("AbSeq") + 
+#   geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5)
+# dev.off()
+# DefaultAssay(rds) <- "SCT"
+# 
+# ## Abseq Ridge ####
+# DefaultAssay(rds) <- "ADT"
+# abseq <- rownames(rds@assays$ADT)
+# plots <- RidgePlot(rds, features = abseq, stack = T) + NoLegend()
+# pdf(paste0(rds@project.name, "-AbseqRidge.pdf"), width = 12, height = 5)
+# print(plots + labs(title = paste("Abseq Ridge Plot:", group)) + 
+#         theme(axis.text.y = element_text(hjust = 0))
+# )
+# dev.off()
+# 
+# DefaultAssay(rds) <- "SCT"
 
 ## Subset umap ####
 split.by <- var2
@@ -463,7 +474,7 @@ write.csv(table(rds[[var1]][,1], rds[[var2]][,1]), paste0(rds@project.name,"-tab
 
 # Stacked + percent
 pdf(paste0(rds@project.name,"-BarPct.pdf"))
-print(ggplot(data, aes(fill=geno, y=Percentage, x=seurat_clusters)) +   #EDIT
+print(ggplot(data, aes(fill=condition, y=Percentage, x=seurat_clusters)) +   #EDIT
         geom_bar(position="fill", stat="identity") +
         theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
         ggtitle("Cell Composition"))
@@ -471,7 +482,7 @@ dev.off()
 
 
 ## DEG Subclusters####
-group <- "condition"
+group <- "seurat_clusters"
 Idents(rds)<-group
 idents <- levels(Idents(rds))
 idents
@@ -493,9 +504,9 @@ saveWorkbook(wb, file=paste0(rds@project.name, "-", group, "-DEGs.xlsx"), overwr
 ### Genos ####
 degs <- NULL
 wb <-NULL
-group <- "geno"
+group <- "condition"
 Idents(rds) <- group
-comparisons <- list(list("IL6","WT"), list("GCSF", "WT"), list("DKO", "WT"))
+comparisons <- list(list("Act","Hlt"), list("Rec", "Hlt"), list("Act", "Rec"))
 #rds <- PrepSCTFindMarkers(rds)
 wb <- createWorkbook()
 for (pair in comparisons){
@@ -513,7 +524,7 @@ saveWorkbook(wb,file=paste0(rds@project.name, "-", group, "-DEGs.xlsx"), overwri
 ### Filter DEGs ####
 # by LogFC, gate out upregs if pct1 < 0.5
 ### IF BLANK SHEETS MANUALLY DELETE!!!!!! ####
-input_file_list <- c(paste(rds@project.name, A, B, "DEGs", sep = "-"))
+input_file_list <- c(paste0(rds@project.name, "-seurat_clusters-DEGs"), paste0(rds@project.name, "-condition-DEGs"))
 
 for (input_file in input_file_list){
   print(input_file)
@@ -583,9 +594,11 @@ for (input_file in input_file_list){
 # keep  <- names(clustSize[clustSize >= n])
 # sub <-subset(rds, idents = keep)
 #### by cluster ####
-top <- 5
-input_file <- paste0("mouseBM-anno-annotations-DEGs")
-sheet_names <- excel_sheets(paste0(input_file, "-filtered.xlsx"))
+top <- 10
+# input_file <- paste0("mouseBM-anno-annotations-DEGs")
+group <- "seurat_clusters"
+input_file <- paste0(rds@project.name, "-", group, "-DEGs")
+sheet_names <- excel_sheets(paste0(input_file, ".xlsx"))
 genes <- c()
 for (sheet in sheet_names) {
   print(sheet)
@@ -596,9 +609,9 @@ for (sheet in sheet_names) {
 genes <- unique(genes[!is.na(genes)])
 genes <- genes[!grepl("^ENS", genes)]
 genes <- genes[!grepl("^LINC", genes)]
-pdf(paste0(rds@project.name, "-seurat_clusters-DotTop", top,".pdf"), width =17, height =5)
-print(DotPlot(rds, features = unique(genes), cols = "RdYlBu", col.min = 0, dot.scale = 5, group.by = "annotation") +
-        ggtitle(paste(rds@project.name, "Top 10 per cluster")) +
+pdf(paste0(rds@project.name, "-", group, "-DotTop", top,".pdf"), width =17, height =5)
+print(DotPlot(rds, features = unique(genes), cols = "RdYlBu", col.min = 0, dot.scale = 5, group.by = group) +
+        ggtitle(paste(rds@project.name, group, "Top", top)) +
         theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.text.y = element_text(hjust = 0)) +
         geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5))
 dev.off()
@@ -611,8 +624,8 @@ dev.off()
 # clustSize <- table(rds$cond.clust)
 # keep  <- names(clustSize[clustSize >= n])
 # sub <-subset(rds, idents = keep)
-
-input_file <-paste0(rds@project.name, "-geno-DEGs")
+group <- "condition"
+input_file <-paste0(rds@project.name, "-", group, "-DEGs")
 sheet_names <- excel_sheets(paste0(input_file, ".xlsx"))
 genes <- c()
 for (sheet in sheet_names) {
@@ -625,32 +638,32 @@ genes <- unique(genes[!is.na(genes)])
 genes <- genes[!grepl("^ENS", genes)]
 genes <- genes[!grepl("^LINC", genes)]
 
-pdf(paste(input_file, "DotTop10.pdf", sep = "-"), width = 10, height = 7)
-print(DotPlot(sub, features = unique(genes), cols = "RdYlBu", col.min = 0, dot.scale = 5, group.by = "cond.clust") +
-        ggtitle(paste(rds@project.name, "Top 10 per genotype")) +
+pdf(paste0(rds@project.name, "-DotTop", group, top,".pdf"), width = 10, height = 7)
+print(DotPlot(rds, features = unique(genes), cols = "RdYlBu", col.min = 0, dot.scale = 5, group.by = group) +
+        ggtitle(paste(rds@project.name, "Top", top)) +
         theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.text.y = element_text(hjust = 0)) +
         geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5))
 dev.off()
 
 # Pathway Geno ####
 # List of Enrichr databases: https://maayanlab.cloud/Enrichr/#libraries
-databaseList <- c("KEGG_2019_Mouse", 
-                  "GO_Biological_Process_2021",
-                  "Mouse_Gene_Atlas", 
-                  "MSigDB_Hallmark_2020",
-                  "Reactome_Pathways_2024",
-                  "WikiPathways_2024_Mouse")
-
-Idents(rds) <- group
-comparisons <- list(list("IL6","WT"), list("GCSF", "WT"), list("DKO", "WT"))
-for (pair in comparisons){
-  A = pair[[1]]
-  B = pair[[2]]
-  pdf(paste0(rds@project.name, "-Pathway-", A, "v", B, ".pdf"), width = 10, height = 6)
-  for(db in databaseList){
-    print(DEenrichRPlot(rds, ident.1 = A, ident.2 = B, max.genes = 100,
-                        logfc.threshold = 0.25, p.val.cutoff = 0.05, num.pathway = 10,
-                        enrich.database = db))
-  }
-  dev.off() 
-}
+# databaseList <- c("KEGG_2019_Mouse", 
+#                   "GO_Biological_Process_2021",
+#                   "Mouse_Gene_Atlas", 
+#                   "MSigDB_Hallmark_2020",
+#                   "Reactome_Pathways_2024",
+#                   "WikiPathways_2024_Mouse")
+# 
+# Idents(rds) <- group
+# comparisons <- list(list("IL6","WT"), list("GCSF", "WT"), list("DKO", "WT"))
+# for (pair in comparisons){
+#   A = pair[[1]]
+#   B = pair[[2]]
+#   pdf(paste0(rds@project.name, "-Pathway-", A, "v", B, ".pdf"), width = 10, height = 6)
+#   for(db in databaseList){
+#     print(DEenrichRPlot(rds, ident.1 = A, ident.2 = B, max.genes = 100,
+#                         logfc.threshold = 0.25, p.val.cutoff = 0.05, num.pathway = 10,
+#                         enrich.database = db))
+#   }
+#   dev.off() 
+# }
