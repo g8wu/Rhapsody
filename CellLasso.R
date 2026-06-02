@@ -91,8 +91,17 @@ cellLasso <- function(rds, reduction = rds@misc$umap, dims = 1:2) {
 }
 
 # MAIN ####
-cellLasso(rds, reduction = "wnn.umap")
+cellLasso(rds, reduction = "SPATIAL")
+hc3 <- selected.cells
+drs03 <- selected.cells
+DRS02 <- selected.cells
+
+Idents(rds, cells= selected.cells) <- "DRS02"
+DimPlot(rds, reduction = "SPATIAL")
+selected.cells <- NULL
 
 
-Idents(rds, cells= selected.cells) <- "Sample_01"
-DimPlot(rds, reduction = "wnn.umap")
+rds$patient <- Idents(rds)
+table(Idents(rds))
+
+base::saveRDS(rds, "AD_01_HC.rds")

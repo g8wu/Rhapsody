@@ -48,15 +48,15 @@ setwd("/mnt/bioadhoc/Groups/Collaborators/ben.croker/nomid")
 
 #  Annotate ####################
 Idents(rds) <- rds$seurat_clusters
-anno <- read.csv(paste0("RIME_basicAnno.csv"), header = FALSE)
+anno <- read.csv(paste0(rds@project.name,"-basicAnno.csv"), header = FALSE)
 annotations <- setNames(anno[, 2], anno[, 1])
 rds <- RenameIdents(rds, annotations)
-rds$basicAnno <- Idents(rds)
+rds$annotations <- Idents(rds)
 table(Idents(rds))
 
 # alphabetize the cell types
 Idents(rds) <- factor(Idents(rds), levels = sort(levels(rds)))
-rds$basicAnno <- Idents(rds)
+rds$annotations <- Idents(rds)
 
 # order by numeric value
 Idents(rds) <- factor(Idents(object = rds), levels = sort(as.numeric(levels(rds))))
@@ -68,7 +68,7 @@ saveRDS(rds, paste0(rds@project.name, ".RDS"))
 library(gridExtra)
 # PRINT
 pdf(paste0(rds@project.name, "-Bar.pdf"), width = 5, height = 5)
-table <- data.frame(table(rds$annotations, rds$geno))
+table <- data.frame(table(rds$annotations, rds$condition))
 table$Percentage <- round((table$Freq / sum(table$Freq)) * 100, 1)
 ggplot(table, aes(x = Var1, y = Freq, fill = Var2)) +
   geom_bar(stat = "identity", position = "dodge") +
@@ -80,14 +80,14 @@ dev.off()
 
 ### Barplot Percentage####
 var1 <- "annotations"
-var2 <-"geno"
+var2 <-"condition"
 data <- data.frame(table(rds[[var1]][,1], rds[[var2]][,1]))
 colnames(data) <- c(var1, var2, "Freq")
 data$Percentage <- round((data$Freq / sum(data$Freq)) * 100, 1)
 
 # Stacked + percent
 pdf(paste0(rds@project.name,"-BarPct.pdf"))
-print(ggplot(data, aes(fill=geno, y=Percentage, x=annotations)) +   #EDIT
+print(ggplot(data, aes(fill=condition, y=Percentage, x=annotations)) +   #EDIT
         geom_bar(position="fill", stat="identity") +
         theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
         ggtitle("Cell Composition"))
@@ -159,10 +159,10 @@ select.cells <- CellSelector(DimPlot(sub, reduction = rds@misc$umap,raster = F))
 # DimPlot(sub, reduction = rds@misc$umap, label = T)
 
 # Set reselection to original object
-Idents(rds, cells = select.cells) <- "Endothelial"
+Idents(rds, cells = select.cells) <- "DRS08"
 Idents(rds) <- factor(Idents(rds), levels = sort(levels(rds)))
 #Idents(rds) <- factor(Idents(rds), levels = sort((levels(rds))))
-rds$basicAnno <- Idents(rds)
+rds$patient <- Idents(rds)
 DimPlot(rds, reduction = rds@misc$umap, label = T)
 gc()
 

@@ -99,6 +99,7 @@ for (p in paths){
   title(paste(rds@project.name, p))
 }
 dev.off()
+
 ### Print by Cell Type ####
 idents <- levels(cellchat@idents)
 idents
@@ -153,38 +154,6 @@ for(path in paths) {
   mtext(rds@project.name, outer = T, cex = 3)
 }
 dev.off()
-
-## Compare Cellchat ####
-# https://rdrr.io/github/sqjin/CellChat/f/tutorial/Comparison_analysis_of_multiple_datasets.Rmd
-act <- readRDS("~/rime/CellChat/RIME-anno-CC-Act.rds")
-hlt <- readRDS("~/rime/CellChat/RIME-anno-CC-Hlt.rds")
-rec <- readRDS("~/rime/CellChat/RIME-anno-CC-Rec.rds")
-
-# list(A, B) RED = UPREG in B, BLUE = DOWNREG in A
-list <- list(Healthy = hlt, Active = act)
-
-cellchat <- mergeCellChat(list, add.names = names(list))
-
-pdf(paste0(rds@project.name, "-CC-barplot-ActvsHlt.pdf"))
-compareInteractions(cellchat, show.legend = F)
-compareInteractions(cellchat, show.legend = F)
-par(mfrow = c(1,2), xpd=TRUE)
-dev.off()
-
-pdf(paste0(rds@project.name, "-CC-ActvsHlt.pdf"), width = 10, height = 5)
-netVisual_diffInteraction(cellchat, weight.scale = T, title.name = "Number of Interactions")
-netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", title.name = "Weight of Interactions")
-gg1 <- netVisual_heatmap(cellchat)
-gg2 <- netVisual_heatmap(cellchat, measure = "weight")
-gg1 + gg2
-dev.off()
-
-
-weight.max <- getMaxWeight(list, attribute = c("idents","count"))
-par(mfrow = c(1,2), xpd=TRUE)
-for (i in 1:length(list)) {
-  netVisual_circle(list[[i]]@net$count, weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], edge.width.max = 12, title.name = paste0("Number of interactions - ", names(list)[i]))
-}
 
 ## Compare Cellchat ####
 # https://rdrr.io/github/sqjin/CellChat/f/tutorial/Comparison_analysis_of_multiple_datasets.Rmd

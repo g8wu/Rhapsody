@@ -3,13 +3,59 @@ set.seed(99)
 group <- "annotations"
 Idents(rds) <- group
 
-pdf(paste0(rds@project.name, "-", group, "-QCVln", ".pdf"), height = 5, width = 10)
-plots <- lapply(features[1:3], function(i) {
-  VlnPlot(rds, features = i, pt.size = 0)
-})
-print(wrap_plots(plots, ncol = 3) & NoLegend() & 
-        theme(axis.text.x = element_text(angle = 90, hjust = 1)))
+pdf(paste(project, "VlnQC.pdf", sep = "-"), width = 20, height = 7)
+print(VlnPlot(rds, features = features, pt.size = 0, ncol = 4, group.by = "patient") + NoLegend())
+print(VlnPlot(rds, features = features, pt.size = 0, ncol = 4, group.by = "condition") + NoLegend())
 dev.off()
+
+# Norm & Cluster ####
+alg <- 4
+resRange <- seq(0.2, 0.5, by = 0.1)
+rnaPCs <- 50
+adtPCs <- 20
+algKey <- c("Louvain", "Refined Louvain", "SLM", "Leiden")
+
+## RNA Norm PCA ############## 
+DefaultAssay(rds) <- 'RNA'
+rds <- SCTransform(rds, assay = "RNA",
+                   new.assay.name = "SCT",
+                   vars.to.regress = "percent.mt")
+rds <- RunPCA(rds, assay = "SCT", reduction.name = "pca_rna")
+
+## Harmonize RNA ####
+# Batch effect correct (BeC)
+rds <- RunHarmony(rds, group.by.vars = "slide", 
+                  reduction = "pca_rna", 
+                  reduction.save = "harmony_rna")
+## UMAP RNA ####
+# UMAP Without Harmony
+rds <- RunUMAP(rds, reduction = "pca_rna", dims = 1:rnaPCs, reduction.name = "umap")
+# UMAP With Harmony
+rds <- RunUMAP(rds, reduction = "harmony_rna", dims = 1:rnaPCs, reduction.name = "harmony_umap")
+
+# Print
+pdf(paste0(rds@project.name,"-PCA-Harmony.pdf"))
+print(DimPlot(rds, reduction = "umap"))
+print(DimPlot(rds, reduction = "harmony_umap"))
+print(DimPlot(rds, reduction = "pca_rna"))
+dev.off()
+
+## RNA Cluster ####
+set.seed(99)
+rds <- FindNeighbors(rds, dims = 1:rnaPCs, reduction = "harmony_rna")
+
+# Multi-res Clustering
+pdf(paste0(rds@project.name, "-UMAP-RNA.pdf"))
+for(res in resRange) {
+  print(res)
+  rds <- FindClusters(rds, algorithm = alg, resolution = res)
+  print(DimPlot(rds, reduction = 'harmony_umap', label = TRUE, raster = F) +
+          labs(title = paste0("RNA UMAP ", algKey[alg],": ", res)))
+}
+dev.off()
+
+## SAVE!! ####
+saveRDS(rds, paste0(rds@project.name,".rds"))
 
 # DotPlot ####
 listName <- "Type1_2_dress"

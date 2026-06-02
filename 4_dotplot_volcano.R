@@ -193,8 +193,8 @@ grep("GBP", rownames(rds), value = T)
 #write.csv(grep("Il", rds_genes, value = T), file = "cytokinesInBraindata.csv")
 
 ## DotPlot ####
-listName <- "Microglia-geno-v1"
-group <- "anno.geno"
+listName <- "Type1_2_dress"
+group <- "anno.cond"
 w = 10
 h = 6
 n = 2
@@ -208,14 +208,13 @@ names <- names(genes)
 pdf(paste0(rds@project.name , "-Dot-", listName, "-", group, ".pdf"), width = w, height = h)
 for (col in names){
   print(col)
-  print(DotPlot(rds, features = genes[[col]], cols = "RdYlBu", col.min = 0, dot.scale = 5) +
+  print(DotPlot(rds, features = toupper(genes[[col]]), cols = "RdYlBu", col.min = 0, dot.scale = 5) +
           #coord_flip() + 
           geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5) +
           ggtitle(paste0(col, " | width: ", w, " height: ", h)) +
-          theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.text.y = element_text(hjust = 0)) +
+          theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.text.y = element_text(hjust = 0)) + 
         # geom_hline(yintercept = seq(n-1.5, length(unique(Idents(rds))) - 0.5, by = n), color = "black", linetype = "dashed") +
         geom_hline(yintercept = seq(n+0.5, length(unique(Idents(rds))) - 0.5, by = n), color = "black")
-        # geom_hline(yintercept = custom, color = "black")
   )
 }
 dev.off()
@@ -366,7 +365,7 @@ dev.off()
 # rds <- PrepSCTFindMarkers(rds)
 # print("PrepSCTFindMarkers done")
 
-group <-"annotationsRev"
+group <-"annotations"
 Idents(rds) <- group
 idents <- levels(Idents(rds))
 idents
@@ -463,7 +462,8 @@ Idents(rds) <- rds$clust.cond
 # sub <-subset(rds, idents = keep)
 ### by cluster ####
 top <- 5
-input_file <- paste0("mouseBM-anno-annotations-DEGs")
+group <- "annotations"
+input_file <- paste0(rds@project.name, "-", group,"-DEGs")
 sheet_names <- excel_sheets(paste0(input_file, "-filtered.xlsx"))
 genes <- c()
 for (sheet in sheet_names) {
@@ -475,9 +475,9 @@ for (sheet in sheet_names) {
 genes <- unique(genes[!is.na(genes)])
 genes <- genes[!grepl("^ENS", genes)]
 genes <- genes[!grepl("^LINC", genes)]
-pdf(paste0(rds@project.name, "-seurat_clusters-DotTop", top,".pdf"), width =17, height =5)
-print(DotPlot(rds, features = unique(genes), cols = "RdYlBu", col.min = 0, dot.scale = 5, group.by = "annotation") +
-        ggtitle(paste(rds@project.name, "Top 10 per cluster")) +
+pdf(paste0(rds@project.name,"-", group, "-DotTop", top,".pdf"), width =17, height =5)
+print(DotPlot(rds, features = unique(genes), cols = "RdYlBu", col.min = 0, dot.scale = 5, group.by = group) +
+        ggtitle(paste(rds@project.name, "Top", top, "per cluster")) +
         theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.text.y = element_text(hjust = 0)) +
         geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5))
 dev.off()
