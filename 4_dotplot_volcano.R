@@ -123,14 +123,14 @@ dev.off()
 DefaultAssay(rds) <- "SCT"
 
 ## Ridge ####
-group <-"seurat_clusters"
+group <-"geno"
 Idents(rds) <- group
 DefaultAssay(rds) <- "ADT"
 abseq <- rownames(rds@assays$ADT)
 plots <- RidgePlot(rds, features = abseq, stack = T) + NoLegend()
 # PRINT
 #pdf(paste(rds@project.name, "AbseqRidge.pdf", sep = "-"), width = length(abseq) / 5 * 4.8, height = length(abseq) / 5 * 6)
-pdf(paste0(rds@project.name, "-AbseqRidge-", group, ".pdf"), width = 12, height = 5)
+pdf(paste0(rds@project.name, "-AbseqRidge-", group, ".pdf"), width = 12, height = 3)
 print(plots + labs(title = paste("Abseq Ridge Plot:", group)) + 
         theme(axis.text.y = element_text(hjust = 0))
 )
@@ -365,7 +365,7 @@ dev.off()
 # rds <- PrepSCTFindMarkers(rds)
 # print("PrepSCTFindMarkers done")
 
-group <-"annotations"
+group <-"clust.geno"
 Idents(rds) <- group
 idents <- levels(Idents(rds))
 idents
@@ -461,8 +461,8 @@ Idents(rds) <- rds$clust.cond
 # keep  <- names(clustSize[clustSize >= n])
 # sub <-subset(rds, idents = keep)
 ### by cluster ####
-top <- 5
-group <- "annotations"
+top <- 10
+group <- "seurat_clusters"
 input_file <- paste0(rds@project.name, "-", group,"-DEGs")
 sheet_names <- excel_sheets(paste0(input_file, "-filtered.xlsx"))
 genes <- c()
@@ -470,14 +470,17 @@ for (sheet in sheet_names) {
   print(sheet)
   # Read the sheet
   degs <- read.xlsx(paste0(input_file, "-filtered.xlsx"), sheet = sheet)
+  # Filter out noncoding
+  degs <- degs[!grepl("^ENS", degs$gene),]
+  degs <- degs[!grepl("^LINC", degs$gene),]
+  degs <- degs[!grepl("Rik$",degs$gene),]
   genes <- append(genes, degs$gene[1:top])
 }
 genes <- unique(genes[!is.na(genes)])
-genes <- genes[!grepl("^ENS", genes)]
-genes <- genes[!grepl("^LINC", genes)]
+
 pdf(paste0(rds@project.name,"-", group, "-DotTop", top,".pdf"), width =17, height =5)
 print(DotPlot(rds, features = unique(genes), cols = "RdYlBu", col.min = 0, dot.scale = 5, group.by = group) +
-        ggtitle(paste(rds@project.name, "Top", top, "per cluster")) +
+        ggtitle(paste(rds@project.name, "Top", top, "per", group)) +
         theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.text.y = element_text(hjust = 0)) +
         geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5))
 dev.off()

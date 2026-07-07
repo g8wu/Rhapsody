@@ -1,5 +1,6 @@
 set.seed(99)
 library(openxlsx)
+library(readxl)
 library(Seurat)
 library(RColorBrewer)
 library(edgeR)
@@ -604,6 +605,43 @@ dev.off()
 
 
 # Custom order dotplots ####
+## All ####
+custom <- c("Microglia",
+            "Endothelial",
+            "NeP",
+            "Pre Neutrophil",
+            "Neutrophil",
+            "Cycling G2/M Cell",
+            "B Cell",
+            "T Cell",
+            "Monocyte",
+            "Cycling Microglia",
+            "Brain Pericyte",
+            "Spleen Pericyte",
+            "Vascular Leptomeningeal",
+            "Arachnoid Barrier",
+            "Choroid Plexus",
+            "Periventricular Endothelial",
+            "Nerve-associated Fibroblast",
+            "Erythroblast",
+            "Erythroid")
+## Basic ####
+custom <- c("Microglia",
+            "Endothelial",
+            "Neutrophil",
+            "Cycling G2/M Cell",
+            "B Cell",
+            "T Cell",
+            "Monocyte",
+            "Brain Pericyte",
+            "Spleen Pericyte",
+            "Vascular Leptomeningeal",
+            "Arachnoid Barrier",
+            "Choroid Plexus",
+            "Periventricular Endothelial",
+            "Nerve-associated Fibroblast",
+            "Erythroblast",
+            "Erythroid")
 ## Neuts ####
 custom <- c("NeP",
             "Pre-Neutrophil",
@@ -614,30 +652,40 @@ custom <- c("NeP",
             "Eosinophil"
             )
 # order the cell types
-Idents(rds) <- factor(Idents(rds), levels = rev(custom))
+Idents(rds) <- factor(Idents(rds), levels = custom)
 rds$annotations <- Idents(rds)
 
 rds$anno.geno <-  paste(rds$annotations, rds$geno)
 Idents(rds)<- "anno.geno"
 levels(Idents(rds))
-custom <- c("NeP NM",
-            "NeP WT",
-            "Pre-Neutrophil NM",
-            "Pre-Neutrophil WT",           
-            "Immature Neutrophil NM",
-            "Immature Neutrophil WT",
-            "Spleen Mature Neutrophil NM",
-            "Spleen Mature Neutrophil WT", 
-            "Brain Mature Neutrophil NM",
-            "Brain Mature Neutrophil WT",
-            "Aged Neutrophil NM",
-            "Aged Neutrophil WT",
-            "Eosinophil NM",
-            "Eosinophil WT"
+custom <- c("NeP Spleen NM",
+            "NeP Spleen WT",
+            "Pre-Neutrophil Spleen NM",
+            "Pre-Neutrophil Spleen WT",           
+            "Immature Neutrophil Spleen NM",
+            "Immature Neutrophil Spleen WT",
+            "Mature Neutrophil Brain NM",
+            "Mature Neutrophil Brain WT",
+            "Mature Neutrophil Spleen NM",
+            "Mature Neutrophil Spleen WT", 
+            "Aged Neutrophil Brain NM",
+            "Aged Neutrophil Brain WT",
+            "Aged Neutrophil Spleen NM",
+            "Aged Neutrophil Spleen WT",
+            "Eosinophil Brain NM",
+            "Eosinophil Brain WT",
+            "Eosinophil Spleen NM",
+            "Eosinophil Spleen WT"
             )
+custom <- c("NeP",
+            "Pre-Neutrophil",
+            "Immature Neutrophil",
+            "Mature Neutrophil",
+            "Aged Neutrophil",
+            "Eosinophil")
 # order the cell types
-Idents(rds) <- factor(Idents(rds), levels = rev(custom))
-rds$anno.geno <- Idents(rds)
+Idents(rds) <- factor(Idents(rds), levels = custom)
+rds$anno.short <- Idents(rds)
 
 ## Endo ####
 rds$anno.geno <- paste(rds$annotations, rds$geno)
@@ -730,3 +778,28 @@ par(mfrow = c(1,2), xpd=TRUE)
 for (i in 1:length(list)) {
   netVisual_circle(list[[i]]@net$count, weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], edge.width.max = 12, title.name = paste0("Number of interactions - ", names(list)[i]))
 }
+
+
+# DEG subcluster genos ####
+group <-"annotations"
+Idents(neuts) <- group
+idents <- levels(Idents(neuts))
+idents
+wb <- createWorkbook()
+for(i in idents){
+  print(i)
+  rds <- subset(neuts, idents= i)
+  Idents(rds) <- rds$geno
+  subIdents <- levels(Idents(rds))
+  degs <- FindAllMarkers(rds, only.pos = F, logfc.threshold = 0.5, assay = "SCT", recorrect_umi = F)
+  # Create Excel workbook
+  for (j in subIdents){
+    print(j)
+    subset <- degs[degs$cluster == j,]
+    # Sort by decreasing avg LogFC
+    subset <- subset[order(subset$avg_log2FC, decreasing = T),]
+    addWorksheet(wb, paste(i,j))
+    writeData(wb, sheet = paste(i,j) , subset)
+  }
+}
+saveWorkbook(wb, file=paste0(neuts@project.name, "-", group, "-DEGs.xlsx"), overwrite = TRUE)

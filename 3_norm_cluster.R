@@ -26,7 +26,6 @@ library(reticulate)
 library(leidenAlg)
 library(ADTnorm) #2
 library(Seurat)
-options(Seurat.object.assay.version = 'v5')
 
 # Bash Script Settings ############# 
 # FindCluster alg 1:  Louvain | fast & effective but not for complex datasets,
@@ -58,7 +57,7 @@ options(Seurat.object.assay.version = 'v5')
 project <- "Nomid"
 fileType <- ".rds"
 alg <- 4
-resRange <- seq(0.4, 0.6, by = 0.1)
+resRange <- seq(0.2, 0.5, by = 0.1)
 setwd("/mnt/bioadhoc/Groups/Collaborators/ben.croker/nomid")
 print("_______________________________________________")
 
@@ -181,14 +180,15 @@ combinedRNA <- IntegrateData(anchors, normalization.method = "SCT")
 DefaultAssay(combinedRNA) <- "integrated"
 gc()
 combinedRNA <- ScaleData(combinedRNA)
-combinedRNA <- RunPCA(combinedRNA, npcs = rnaPCs)
+combinedRNA <- RunPCA(combinedRNA, npcs = rnaPCs, reduction.name = "pca_rna")
 
 # Batch effect correction
 combinedRNA <- RunHarmony(combinedRNA, group.by.vars = "orig.ident", 
-                          reduction.use = "pca", reduction.save = "harmony.rna")
-
-combinedRNA <- RunUMAP(combinedRNA, reduction = "harmony.rna", reduction.name = "rna.umap",
-                       reduction.key = 'rnaUMAP_', dims = 1:rnaPCs)
+                          reduction.use = "pca_rna", reduction.save = "harmony_rna")
+# UMAP Without Harmony
+combinedRNA <- RunUMAP(combinedRNA, reduction = "pca_rna", dims = 1:rnaPCs, reduction.name = "umap")
+# UMAP With Harmony
+combinedRNA <- RunUMAP(combinedRNA, reduction = "harmony_rna", dims = 1:rnaPCs, reduction.name = "harmony_rna.umap")
 
 #SAVE
 saveRDS(combinedRNA, file = paste(project, "RNASCT.RDS", sep = "-"))
@@ -332,24 +332,18 @@ rds <- subset(rds, idents= "singlet")
 ## Cell-specific modality weights: combinedRNA$RNA.weight
 print("_______________________________________________ Starting RNA WNN Clustering")
 #rds <- FindVariableFeatures(rds, assay = "SCT", selection.method = "vst", nfeatures = 3000)
-rds <- FindNeighbors(rds, dims = 1:rnaPCs, reduction = "harmony.rna")
-rds <- RunUMAP(rds, dims = 1:rnaPCs)
-
-# Save metadata
-rds@project.name <- paste0(project, "-RNA")
-rds@misc$clustAlg <- algKey[alg]
-rds@misc$umap <- "rna.umap"
+rds <- FindNeighbors(rds, dims = 1:rnaPCs, reduction = "harmony_rna")
+rds <- RunUMAP(rds, dims = 1:rnaPCs, reduction = "pca_rna")
 
 # Multi-res Clustering
 pdf(paste0(rds@project.name, "-RNAUMAP.pdf"))
 for(res in resRange) {
   print(res)
-  rds <- FindClusters(rds, algorithm = alg, resolution = res, graph.name = "integrated_nn")
-  print(DimPlot(rds, reduction = 'umap', label = TRUE, raster = F) +
-          labs(title = paste0("RNA WNN UMAP ", algKey[alg],": ", res)))
+  rds <- FindClusters(rds, algorithm = alg, resolution = res)
+  print(DimPlot(rds, reduction = 'harmony_rna.umap', label = TRUE, raster = F) +
+          labs(title = paste0("RNA UMAP ", algKey[alg],": ", res)))
 }
 dev.off()
-saveRDS(rds, file= paste0(rds@project.name, "-RNAClust.rds"))
 
 print(paste0(Sys.time(), " -> RNA ONLY multi res WNN done!"))
 
@@ -357,13 +351,9 @@ print(paste0(Sys.time(), " -> RNA ONLY multi res WNN done!"))
 # Use RNA UMAP and ADT PCA for MultiModal
 print("_______________________________________________ Starting ADT & RNA WNN Clustering")
 rds <- combinedRNA
-rds <- FindMultiModalNeighbors(rds, reduction.list = list("harmony.rna", "apca"),
-                               dims.list = list(1:rnaPCs, 1:adtPCs), modality.weight.name = "integrated.weight")
-rds <- RunUMAP(rds, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
-# Save metadata 
-rds@project.name <- paste0(project, "-WNN")
-rds@misc$clustAlg <- algKey[alg]
-rds@misc$umap <- "wnn.umap"
+rds <- FindMultiModalNeighbors(rds, reduction.list = list("harmony_rna", "pca_adt"),
+                               dims.list = list(1:rnaPCs, 1:adtPCs))
+rds <- RunUMAP(rds, nn.name = "weighted.nn", reduction.name = "wnn.umap")
 
 # Multi-res Clustering
 pdf(paste0(rds@project.name, "-WNNUMAP.pdf"))
@@ -374,7 +364,7 @@ for(res in resRange) {
           labs(title = paste0("ADT&RNA WNN UMAP ", algKey[alg],": ", res)))
 }
 dev.off()
-saveRDS(rds, file= paste0(rds@project.name, "-WNN.rds"))
+saveRDS(rds, file= paste0(rds@project.name, "-RNAsep-adtNormHarm.rds"))
 
 print(paste0(Sys.time(), " -> RNA & ADT multi res WNN done!"))
 

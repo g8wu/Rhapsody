@@ -274,3 +274,15 @@ netVisual_bubble(cellchat, sources.use = c(1:13), comparison = c(1, 2), max.data
 netVisual_bubble(cellchat, sources.use = c(1:13),  comparison = c(1, 2), max.dataset = 1, title.name = "Decreased signaling in RIME", angle.x = 45, remove.isolate = T)
 dev.off()
 
+
+
+# UMAPS ####
+pdf(paste0("RIME-RNAonly-UMAPs.pdf"))
+DimPlot(clr, reduction = "harmony_umap",label= T) + ggtitle("RNA only: res 0.2, Leiden")
+DimPlot(clr, reduction = "harmony_umap", group.by = "orig.ident")
+DimPlot(clr, reduction = "harmony_umap", split.by = "orig.ident", ncol = 2) +NoLegend()
+DimPlot(clr, reduction = "harmony_umap", group.by = "condition")
+DimPlot(clr, reduction = "harmony_umap", split.by = "condition", ncol = 2) +NoLegend()
+DimPlot(clr, reduction = "harmony_umap", group.by = "patient")
+DimPlot(clr, reduction = "harmony_umap", split.by = "patient", ncol = 3) +NoLegend()
+dev.off()
