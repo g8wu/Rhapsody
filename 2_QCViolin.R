@@ -72,7 +72,16 @@ write.csv(table(rds$orig.ident), paste0(project, "_cartCounts.csv"))
 features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "ADT_total")
 
 # Replace Abseq names
-temp <- rds@assays$ADT@counts
+abseq <- c("CD105","CD115-CSF1R","CD117","CD11a","CD11b",
+           "CD11c","CD162-SELPLG","CD16/32-FCGR3/2","CD184-CSCR4","CD19",
+           "CD31","CD326","CD335-NCR1","CD41-ITGA2B","CD45",
+           "CD48","CD62L-SELL","CD71-TFRC","CXCR2","CLEC7a",
+           "CD150","F4/80-ADGRE1","LY6a/e","LY6g","NK1.1-KLRB1b/c",
+           "SIGLECF","TCRb","TER119-LY76"
+           )
+abseq
+rownames(rds[['ADT']]) <- abseq
+abseqChecktemp <- rds@assays$ADT@counts
 rownames(temp) <- abseq
 rds[["ADT"]] <- CreateAssayObject(counts = temp)
 rownames(rds@assays$ADT)
@@ -83,6 +92,9 @@ rds$ADT_total <- colSums(rds@assays$ADT@data)
 
 # Calc percent mitochondrial reads
 rds[["percent.mt"]] <- PercentageFeatureSet(rds, pattern = "(?i)^mt-")
+
+# Calc pct of RBC genes
+rds[["percent.heme"]] <- PercentageFeatureSet(rds, pattern = c("Hba-","Hbb-"))
 
 
 # PRINT each feature as one Violin plot

@@ -26,6 +26,7 @@ library(reticulate)
 library(leidenAlg)
 library(ADTnorm) #2
 library(Seurat)
+options(Seurat.object.assay.version = 'v5')
 
 # Bash Script Settings ############# 
 # FindCluster alg 1:  Louvain | fast & effective but not for complex datasets,
@@ -57,7 +58,7 @@ library(Seurat)
 project <- "Nomid"
 fileType <- ".rds"
 alg <- 4
-resRange <- seq(0.2, 0.5, by = 0.1)
+resRange <- seq(0.4, 0.6, by = 0.1)
 setwd("/mnt/bioadhoc/Groups/Collaborators/ben.croker/nomid")
 print("_______________________________________________")
 
@@ -117,7 +118,7 @@ nCountLower <- 100
 nCountUpper <- 18000
 mtPct <- 25
 
-features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "meta.ADT_total")
+features = c("nFeature_RNA", "nCount_RNA", "percent.mt", "ADT_total")
 # Calc mito pct and Rename ADT
 for (i in seq_along(list)){
   # Trunc abseq names
@@ -173,40 +174,25 @@ print("____________________________________________ RNA integration start")
 features <- SelectIntegrationFeatures(list, nfeatures = 3000)
 list <- PrepSCTIntegration(list, anchor.features = features)
 list <- lapply(list, FUN = RunPCA, features = features)
-anchors <- FindIntegrationAnchors(list, anchor.features = features, dims = 1:30,
-                                  normalization.method = "SCT", reduction = "rpca",
-                                  k.anchor = 20)
+anchors <- FindIntegrationAnchors(list, anchor.features = features, dims = 1:rnaPCs,
+                                  normalization.method = "SCT")
 combinedRNA <- IntegrateData(anchors, normalization.method = "SCT")
 DefaultAssay(combinedRNA) <- "integrated"
 gc()
-combinedRNA <- ScaleData(combinedRNA)
-combinedRNA <- RunPCA(combinedRNA, npcs = rnaPCs, reduction.name = "pca_rna")
 
-# Batch effect correction
+combinedRNA <- RunPCA(combinedRNA, npcs = rnaPCs, reduction.name = "rpca")
+
+## RNA BeC ####
 combinedRNA <- RunHarmony(combinedRNA, group.by.vars = "orig.ident", 
-                          reduction.use = "pca_rna", reduction.save = "harmony_rna")
-# UMAP Without Harmony
-combinedRNA <- RunUMAP(combinedRNA, reduction = "pca_rna", dims = 1:rnaPCs, reduction.name = "umap")
-# UMAP With Harmony
-combinedRNA <- RunUMAP(combinedRNA, reduction = "harmony_rna", dims = 1:rnaPCs, reduction.name = "harmony_rna.umap")
+                          reduction.use = "rpca", reduction.save = "harmony.rpca")
+# With BeC
+combinedRNA <- RunUMAP(combinedRNA, reduction = "harmony.rpca", reduction.name = "harmony.rumap",
+                       dims = 1:rnaPCs)
+# Without BeC
+combinedRNA <- RunUMAP(combinedRNA, reduction = "rpca", reduction.name = "rumap",
+                       dims = 1:rnaPCs)
 
-#SAVE
-saveRDS(combinedRNA, file = paste(project, "RNASCT.RDS", sep = "-"))
 print(paste0(Sys.time(), " -> RNA SCTransform and integration done and saved!"), append = TRUE)
-
-#PRINT
-pdf(paste(project, "RNAUMAP.pdf", sep = "-"))
-print(DimPlot(object = combinedRNA, reduction = "rna.umap", pt.size = 0.4, group.by = "orig.ident"))
-Idents(combinedRNA) <- combinedRNA$orig.ident
-idents <- levels(Idents(combinedRNA))
-for (i in seq_along(idents)){
-  print(idents[i])
-  sample <- WhichCells(combinedRNA, idents = idents[i])
-  print(DimPlot(combinedRNA, reduction = "rna.umap", cells.highlight = sample, raster=F) +
-          labs(title = paste("RNA UMAP",idents[i])) + NoLegend())
-}
-dev.off()
-gc()
 
 # ADT Normalization ############## 
 # Save CLR normalized and merged to separate object (preserves compositional nature but no batch effect correction)
@@ -217,8 +203,10 @@ list <- lapply(list, function(i) {
   DefaultAssay(i) <- 'ADT'
   i <- NormalizeData(i, normalization.method = 'CLR', margin = 2)
   i <- ScaleData(i)
+  i <- RunPCA(i, reduction.name = "apca")
   return(i)
 })
+combinedADT <- merge(list[[1]], y = list[-1])
 DefaultAssay(combinedADT) <- "ADT"
 
 ## ADTnorm ####
@@ -250,50 +238,48 @@ cell_x_adt_norm = ADTnorm(
 )
 
 # Put ADTNorm matrix back into rds
-combinedADT@assays$ADT@data <- t(cell_x_adt_norm)
+# combinedADT@assays$ADT@data <- t(cell_x_adt_norm)
 
 # Save
-saveRDS(combinedADT, paste0(project, "ADTnorm.rds"))
-gc()
-print(paste(Sys.time(), "ADT Norm done"))
+# saveRDS(combinedADT, paste0(project, "ADTnorm.rds"))
+# gc()
+# print(paste(Sys.time(), "ADT Norm done"))
 
 # Only features are from abseq panel
-VariableFeatures(combinedADT) <- rownames(combinedADT[["ADT"]])
-combinedADT <- ScaleData(combinedADT, verbose = FALSE)
-combinedADT <- RunPCA(combinedADT, npcs = length(rownames(rds@assays$ADT)), reduction.name = 'pca', 
-                      verbose = FALSE, approx = FALSE)
-combinedADT <- RunUMAP(combinedADT, reduction = "pca", reduction.name = "adt.umap",
-                       reduction.key = 'adtUMAP_', dims = 1:adtPCs)
-pdf(paste0(project, "-ADTUMAP.pdf"))
-DimPlot(combinedADT, reduction = "adt.umap", raster = F)
-dev.off()
-
-#SAVE
-saveRDS(combinedADT, paste0(project, "ADT-CLR.rds"))
-print(paste0(Sys.time(), " -> ADT & RNA independent normalization done and saved!"))
+VariableFeatures(combinedADT) <- rownames(combinedADT[['ADT']])
+combinedADT <- ScaleData(combinedADT)
+combinedADT <- RunPCA(combinedADT, npcs = length(rownames(rds@assays$ADT)), reduction.name = 'apca')
+combinedADT <- RunUMAP(combinedADT, reduction = "apca", reduction.name = "aumap", 
+                       dims = 1:adtPCs)
+print(paste0(Sys.time(), " -> ADT & RNA independent normalization done!"))
 
 # INTEGRATION ############## 
 print("____________________________________________ INTEGRATION")
 combinedRNA[["ADT"]] <- combinedADT[["ADT"]]
-combinedRNA[["apca"]] <- combinedADT[["pca"]]
-combinedRNA[["adt.umap"]] <- combinedADT[["adt.umap"]]
+combinedRNA[["apca"]] <- combinedADT[["apca"]]
+combinedRNA[["aumap"]] <- combinedADT[["aumap"]]
 
 #PRINT
-pdf(paste(project, "harmonyPCA.pdf", sep = "-"))
-DimPlot(combinedRNA, reduction = "harmony.rna", group.by = "orig.ident")
-DimPlot(combinedRNA, reduction = "pca", group.by = "orig.ident")
+pdf(paste(project, "harmonyPCAUMAP.pdf", sep = "-"))
+ElbowPlot(combinedRNA, reduction = "rpca")
+DimPlot(combinedRNA, reduction = "rpca", group.by = "orig.ident")
+DimPlot(combinedRNA, reduction = "rumap", group.by = "orig.ident")
+DimPlot(combinedRNA, reduction = "harmony.rpca", group.by = "orig.ident")
+DimPlot(combinedRNA, reduction = "harmony.rumap", group.by = "orig.ident")
+ElbowPlot(combinedRNA, reduction = "apca")
 DimPlot(combinedRNA, reduction = "apca", group.by = "orig.ident")
+DimPlot(combinedRNA, reduction = "aumap", group.by = "orig.ident")
 dev.off()
 
 # SAVE!
 combinedRNA@project.name <- project
 saveRDS(combinedRNA, file = paste(project, "integrated.RDS", sep = "-"))
 print(paste0(Sys.time(), " -> RNA & ADT INTEGRATION successful, saved before WNN!"))
-rm(combinedADT)
-rm(harmony)
-gc()
 DefaultAssay(combinedRNA) <- "integrated"
 rds <- combinedRNA
+rm(combinedADT)
+rm(combinedRNA)
+gc()
 
 # scDoubletFinder ####
 sce <- as.SingleCellExperiment(rds, assay = "SCT")
@@ -321,50 +307,56 @@ write.table(data.frame(Class = "Singlet",
                        Value = as.numeric(summary(rds$nCount_RNA[rds$scDblFinder_class=='singlet']))),
             paste0(project, "-DblFinder.csv"), sep = ",", row.names = F, col.names = F, append = T)
 # Save
-saveRDS(rds, paste0(project, "-DbFinder.rds"))
+saveRDS(rds, paste0(rds@project.name, "-DbFind.rds"))
 Idents(rds) <- rds$scDblFinder_class
 rds <- subset(rds, idents= "singlet")
 
-##############  RNA ONLY WNN ############## 
+###########  RNA ONLY  ############## 
 ## WNN data: combinedRNA[['weighted.nn']]
 ## WNN graph: combinedRNA[["wknn"]],
 ## SNN graph used for clustering: combinedRNA[["wsnn"]]
 ## Cell-specific modality weights: combinedRNA$RNA.weight
 print("_______________________________________________ Starting RNA WNN Clustering")
 #rds <- FindVariableFeatures(rds, assay = "SCT", selection.method = "vst", nfeatures = 3000)
-rds <- FindNeighbors(rds, dims = 1:rnaPCs, reduction = "harmony_rna")
-rds <- RunUMAP(rds, dims = 1:rnaPCs, reduction = "pca_rna")
+rds <- FindNeighbors(rds, dims = 1:rnaPCs, reduction = "harmony.rpca")
+rds <- RunUMAP(rds, dims = 1:rnaPCs, reduction.name = "harmony.rumap", reduction = "harmony.rpca")
+
+# Save metadata
+rds@misc$clustAlg <- algKey[alg]
+rds@misc$umap <- "harmony.rumap"
 
 # Multi-res Clustering
-pdf(paste0(rds@project.name, "-RNAUMAP.pdf"))
+pdf(paste0(rds@project.name, "-UMAPRNA.pdf"))
 for(res in resRange) {
   print(res)
-  rds <- FindClusters(rds, algorithm = alg, resolution = res)
-  print(DimPlot(rds, reduction = 'harmony_rna.umap', label = TRUE, raster = F) +
-          labs(title = paste0("RNA UMAP ", algKey[alg],": ", res)))
+  rds <- FindClusters(rds, algorithm = alg, resolution = res, graph.name = "integrated_snn", random.seed = 1)
+  print(DimPlot(rds, reduction = 'harmony.rumap', label = TRUE, raster = F) +
+          labs(title = paste0("RNA WNN UMAP ", algKey[alg],": ", res)))
 }
 dev.off()
+# saveRDS(rds, file= paste0(rds@project.name, "-RNAClust.rds"))
 
 print(paste0(Sys.time(), " -> RNA ONLY multi res WNN done!"))
 
-##############  RNA & ADT WNN ############## 
+############RNA & ADT ############## 
 # Use RNA UMAP and ADT PCA for MultiModal
 print("_______________________________________________ Starting ADT & RNA WNN Clustering")
-rds <- combinedRNA
-rds <- FindMultiModalNeighbors(rds, reduction.list = list("harmony_rna", "pca_adt"),
+rds <- FindMultiModalNeighbors(rds, reduction.list = list("harmony.rpca", "apca"),
                                dims.list = list(1:rnaPCs, 1:adtPCs))
 rds <- RunUMAP(rds, nn.name = "weighted.nn", reduction.name = "wnn.umap")
+# Save metadata 
+rds@misc$clustAlg <- algKey[alg]
 
 # Multi-res Clustering
-pdf(paste0(rds@project.name, "-WNNUMAP.pdf"))
+pdf(paste0(rds@project.name, "-UMAPWNN.pdf"))
 for(res in resRange) {
   print(res)
   rds <- FindClusters(rds, algorithm = alg, resolution = res, graph.name = "wsnn")
   print(DimPlot(rds, reduction= "wnn.umap", label = T, raster = F) + 
-          labs(title = paste0("ADT&RNA WNN UMAP ", algKey[alg],": ", res)))
+          labs(title = paste0("ADT&RNA UMAP ", algKey[alg],": ", res)))
 }
 dev.off()
-saveRDS(rds, file= paste0(rds@project.name, "-RNAsep-adtNormHarm.rds"))
+saveRDS(rds, file= paste0(rds@project.name, "-RNACLR.rds"))
 
 print(paste0(Sys.time(), " -> RNA & ADT multi res WNN done!"))
 

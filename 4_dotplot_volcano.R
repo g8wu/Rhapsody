@@ -84,25 +84,26 @@ dev.off()
 
 ## Subsets way #####
 group <- "annotations"
-split.by <- "condition"
+split.by <- "tiss.geno"
 Idents(rds) <- group
 
-pdf(paste(rds@project.name, "UMAPsubset.pdf", sep = "-"), width = 8, height =5)
+pdf(paste(rds@project.name, "UMAPsubset.pdf", sep = "-"), width = 8, height =8)
 DimPlot(rds, reduction = "harmony_umap", raster = F, group.by = group,split.by = split.by, ncol=2) + 
   NoLegend()
 dev.off()
 
 # ABSEQ ################################# 
 ## DotPlot ####
-group <-"annotations"
+group <-"anno.tiss.geno"
 Idents(rds) <- group
 n = 2
 abseq <- rownames(rds[["ADT"]])
 DefaultAssay(rds) <- "ADT"
-pdf(paste(rds@project.name, group, "AbseqDot.pdf", sep = "-"),width = 10, height = 6)
+pdf(paste(rds@project.name, group, "AbseqDot-trunc.pdf", sep = "-"),width = 10, height = 7)
 DotPlot(rds, features = abseq, col.min = 0, cols = "RdYlBu", group.by = group) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.text.y = element_text(hjust = 0)) + 
   ggtitle("AbSeq") +
+  geom_hline(yintercept = 6.5, color = "black") +
   geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5)
 # coord_flip()
 # geom_hline(yintercept = seq(n+0.5, length(unique(Idents(rds))) - 0.5, by = n), color = "black")
@@ -123,14 +124,14 @@ dev.off()
 DefaultAssay(rds) <- "SCT"
 
 ## Ridge ####
-group <-"geno"
+group <-"seurat_clusters"
 Idents(rds) <- group
 DefaultAssay(rds) <- "ADT"
 abseq <- rownames(rds@assays$ADT)
 plots <- RidgePlot(rds, features = abseq, stack = T) + NoLegend()
 # PRINT
 #pdf(paste(rds@project.name, "AbseqRidge.pdf", sep = "-"), width = length(abseq) / 5 * 4.8, height = length(abseq) / 5 * 6)
-pdf(paste0(rds@project.name, "-AbseqRidge-", group, ".pdf"), width = 12, height = 3)
+pdf(paste0(rds@project.name, "-AbseqRidge-", group, ".pdf"), width = 15, height = 6)
 print(plots + labs(title = paste("Abseq Ridge Plot:", group)) + 
         theme(axis.text.y = element_text(hjust = 0))
 )
@@ -179,11 +180,13 @@ library(pheatmap)
 abseq <- rownames(rds[["ADT"]])
 DefaultAssay(rds) <- "ADT"
 # PRINT
-pdf(paste(rds@project.name, "AbsHeat.tiss.geno.pdf", sep = "-"), width = 4, height = 8)
+pdf(paste(rds@project.name, "AbsHeat-colors.pdf", sep = "-"), width = 5, height = 5)
 avg_exp <- AggregateExpression(rds, assays = "ADT", slot = "data")
 avg_matrix <- avg_exp$ADT[abseq, ]
 scaled <- t(scale(t(avg_matrix)))
-print(pheatmap(scaled, cluster_rows = T, cluster_cols = T, main = "Abseq Avg Expression"))
+print(pheatmap(scaled, cluster_rows = F, cluster_cols = F, 
+               # annotation_col = my_sample_col,
+               main = "DBA AbSeq Average Expression"))
 dev.off()
 DefaultAssay(rds) <- "SCT"
 
@@ -193,38 +196,40 @@ grep("GBP", rownames(rds), value = T)
 #write.csv(grep("Il", rds_genes, value = T), file = "cytokinesInBraindata.csv")
 
 ## DotPlot ####
-listName <- "Type1_2_dress"
-group <- "anno.cond"
-w = 10
-h = 6
+listName <- "Mature_Neut_tiss.geno"
+group <- "anno.geno"
 n = 2
+w = 15
+h = 4
 Idents(rds) <- group
-table(Idents(rds))
 DefaultAssay(rds) <- "SCT"
 genes <- read.csv(paste0(listName, ".csv"), header = T, na.strings = "") %>% lapply(function(column) {column[!is.na(column) & column != ""]})
 names <- names(genes)
 
 # PRINT
-pdf(paste0(rds@project.name , "-Dot-", listName, "-", group, ".pdf"), width = w, height = h)
+pdf(paste(rds@project.name, listName, group, "Dot.pdf", sep = "-"), width = w, height = h)
 for (col in names){
   print(col)
-  print(DotPlot(rds, features = toupper(genes[[col]]), cols = "RdYlBu", col.min = 0, dot.scale = 5) +
+  print(DotPlot(rds, features = genes[[col]], cols = "RdYlBu",  dot.scale = 5, col.min = 0, idents = custom) +
+  # print(DotPlot(rds, features = genes, cols = "RdYlBu",  dot.scale = 5, col.min = 0) +
           #coord_flip() + 
           geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5) +
-          ggtitle(paste0(col, " | width: ", w, " height: ", h)) +
-          theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.text.y = element_text(hjust = 0)) + 
-        # geom_hline(yintercept = seq(n-1.5, length(unique(Idents(rds))) - 0.5, by = n), color = "black", linetype = "dashed") +
-        geom_hline(yintercept = seq(n+0.5, length(unique(Idents(rds))) - 0.5, by = n), color = "black")
+          ggtitle(paste(col, "width", w, "|", "height", h)) +
+          theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.text.y = element_text(hjust = 0))
+          # geom_hline(yintercept = 6.5, color = "black")
+          # geom_hline(yintercept = seq(n-1.5+8, length(unique(Idents(rds))) - 0.5, by = n), color = "black", linetype = "dashed")
+        # geom_hline(yintercept = seq(n+0.5, length(unique(Idents(rds))) - 0.5, by = n), color = "black")
+        # geom_hline(yintercept = custom, color = "black")
   )
 }
 dev.off()
 
 #### scCustom ####
 colors <- colorRampPalette(brewer.pal(n = 9, name = "RdYlBu"))
-listName <- "Microglia-Dotlist-anno.geno_3"
+listName <- "Netu_cellType-v5_abseq"
 group <- "anno.geno"
 Idents(rds) <- group
-DefaultAssay(rds) <- "SCT"
+DefaultAssay(rds) <- "ADT"
 genes <- read.csv(paste0(listName, ".csv"), header = T, na.strings = "") %>% lapply(function(column) {column[!is.na(column) & column != ""]})
 names <- names(genes)
 
@@ -365,7 +370,7 @@ dev.off()
 # rds <- PrepSCTFindMarkers(rds)
 # print("PrepSCTFindMarkers done")
 
-group <-"clust.geno"
+group <-"annotations"
 Idents(rds) <- group
 idents <- levels(Idents(rds))
 idents
@@ -390,7 +395,6 @@ saveWorkbook(wb, file=paste0(rds@project.name, "-", group, "-DEGs.xlsx"), overwr
 # by LogFC, gate out upregs if pct1 < 0.5
 ### IF BLANK SHEETS MANUALLY DELETE!!!!!!
 input_file <- paste0(rds@project.name, "-", group, "-DEGs")
-
 # Also dotplot filtered genes
 sheet_names <- excel_sheets(paste0(input_file, ".xlsx"))
 
@@ -400,6 +404,8 @@ for (sheet in sheet_names) {
   data <- read_excel(paste0(input_file, ".xlsx"), sheet = sheet)
   
   # Apply filtering logic
+  data$pct.diff <- data$pct.1-data$pct.2
+  data <- data[order(data$pct.diff, decreasing = T),]
   top <- data %>%
     filter(p_val_adj < 0.05 & (avg_log2FC > 0 & pct.1 >= 0.5)) %>% 
     slice_head(n=100)
@@ -416,7 +422,7 @@ saveWorkbook(wb, file=paste0(input_file, "-filtered.xlsx"), overwrite = TRUE)
 
 ## Dotplot filtered DEGs ####
 colors <- colorRampPalette(brewer.pal(n = 9, name = "RdYlBu"))
-pdf(paste(input_file, "DotTop100.pdf", sep = "-"), width = 20, height = 6)
+pdf(paste(input_file, "DotTop100.pdf", sep = "-"), width = 25, height = 6)
 for (sheet in sheet_names) {
   # Read the sheet
   data <- read_excel(paste0(input_file, "-filtered.xlsx"), sheet = sheet)
@@ -427,7 +433,7 @@ for (sheet in sheet_names) {
   text(x = 0.5, y = 0.5, paste(sheet, "100 Upreg"), cex = 5, font = 2) # cex changes text size, font changes style
   
   Clustered_DotPlot(rds, features = pull(data, gene), flip = T, 
-                    colors_use_exp = rev(colors(20)), x_lab_rotate = T, 
+                    colors_use_exp = rev(colors(20)), x_lab_rotate = 90, 
                     group.by = group, exp_color_min = 0, 
                     plot_km_elbow = F)
 }
@@ -462,27 +468,25 @@ Idents(rds) <- rds$clust.cond
 # sub <-subset(rds, idents = keep)
 ### by cluster ####
 top <- 10
-group <- "seurat_clusters"
-input_file <- paste0(rds@project.name, "-", group,"-DEGs")
+# input_file <- paste0("Neutrophil-CLR-seurat_clusters-DEGs")
 sheet_names <- excel_sheets(paste0(input_file, "-filtered.xlsx"))
 genes <- c()
 for (sheet in sheet_names) {
   print(sheet)
   # Read the sheet
   degs <- read.xlsx(paste0(input_file, "-filtered.xlsx"), sheet = sheet)
-  # Filter out noncoding
-  degs <- degs[!grepl("^ENS", degs$gene),]
-  degs <- degs[!grepl("^LINC", degs$gene),]
-  degs <- degs[!grepl("Rik$",degs$gene),]
   genes <- append(genes, degs$gene[1:top])
 }
 genes <- unique(genes[!is.na(genes)])
-
-pdf(paste0(rds@project.name,"-", group, "-DotTop", top,".pdf"), width =17, height =5)
-print(DotPlot(rds, features = unique(genes), cols = "RdYlBu", col.min = 0, dot.scale = 5, group.by = group) +
-        ggtitle(paste(rds@project.name, "Top", top, "per", group)) +
+genes <- genes[!grepl("^ENS", genes)]
+genes <- genes[!grepl("^LINC", genes)]
+genes <- genes[!grepl("\\Rik$", genes)]
+write.csv(genes, paste0(rds@project.name,"-Top", top, "-", group, ".csv"))
+pdf(paste0(rds@project.name, "-DotTop", top, "-", group, ".pdf"), width =20, height =5)
+DotPlot(rds, features = unique(genes), cols = "RdYlBu", col.min = 0, dot.scale = 5, group.by = group) +
+        ggtitle(paste(rds@project.name, "Top", top, "per cluster")) +
         theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.text.y = element_text(hjust = 0)) +
-        geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5))
+        geom_point(aes(size = pct.exp), shape = 21, colour = "black", stroke = 0.5)
 dev.off()
 
 
